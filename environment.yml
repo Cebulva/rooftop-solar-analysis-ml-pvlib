@@ -5,51 +5,51 @@ channels:
 
 dependencies:
 # === Conda Packages ===
-- python=3.12
-- pip
+  - python=3.12
+  - pip
 
 # --- CORE WEB APP ---
-- streamlit==1.52.0
-- python-dotenv==1.2.1
-- Pillow==12.1.0
+  # - streamlit==1.52.0
+  # - python-dotenv==1.2.1
+  # - Pillow==12.1.0
 
 # --- DATA SCIENCE & PHYSICS ---
-- numpy
-- numba==0.63.1
-- pvlib==0.13.1
-- pandas==2.3.3
-- matplotlib==3.10.8
-- plotly==6.5.1
-- scipy
+  - numpy==2.2.6
+  # - numba==0.63.1
+  - pvlib==0.13.1
+  - pandas==2.3.3
+  - matplotlib==3.10.8
+  # - plotly==6.5.1
+  # - scipy
 
 # --- MAPPING & GEOMETRY ---
-- geopandas
-- shapely==2.1.2
-- folium==0.20.0
-- pyproj
+  - geopandas
+  - shapely==2.1.2
+  # - folium==0.20.0
+  # - pyproj
 
 # --- MACHINE LEARNING & COMPUTER VISION ---
-- tensorflow
-- scikit-image==0.26.0
-- scikit-learn==1.8.0
-- rasterio
+  # - tensorflow
+  # - scikit-image==0.26.0
+  # - scikit-learn==1.8.0
+  # - rasterio
 
 # --- AI & RAG CHATBOT ---
-- pytorch
-- llama-index
-- llama-index-core
-- sentence-transformers
-- ragas
-- python-dotenv
-- pypdf==6.5.0
+  # - pytorch
+  # - llama-index
+  # - llama-index-core
+  # - sentence-transformers
+  # - ragas
+  # - python-dotenv
+  # - pypdf==6.5.0
 
 # --- GOOGLE MAPS INTEGRATION ---
-- googlemaps==4.10.0      # Official Python client for Google Maps services
-- requests==2.32.5        # Required for handling image downloads from Static API
+  - googlemaps==4.10.0      # Official Python client for Google Maps services
+  - requests==2.32.5        # Required for handling image downloads from Static API
 
 # === Pip Packages ===
-- pip:
-  - llama-index-llms-google-genai
-  - faiss-cpu==1.13.2               # Vector database for your legal docs
-  - opencv-python-headless==4.12.0.88
-  - streamlit-folium==0.25.3
+  - pip:
+    - llama-index-llms-google-genai
+    # - faiss-cpu==1.13.2               # Vector database for your legal docs
+    - opencv-python-headless==4.12.0.88
+    - streamlit-folium==0.25.3
