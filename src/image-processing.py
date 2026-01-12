@@ -1,0 +1,130 @@
+import cv2
+import numpy as np
+from matplotlib import pyplot as plt
+
+### Mask Refienment - Morphology ###
+
+raw_mask = cv2.imread('images/test_satellite.png', cv2.IMREAD_GRAYSCALE)
+
+# load img in greyscale
+img = cv2.imread('images/test_satellite.png', cv2.IMREAD_GRAYSCALE)
+# Create a mask of the img
+_, mask = cv2.threshold(img, 220, 255, cv2.THRESH_BINARY_INV)
+
+# Define a square kernal (brush) - tweak size if dialation isn't clean
+kernal = np.ones((8,8), np.uint8)
+
+# Different methods:
+dialation = cv2.dilate(mask, kernal, iterations=2)
+
+erosion = cv2.erode(mask, kernal, iterations=1)
+
+opened = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernal)
+
+# performs Dilation followed by Erosion
+closed = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernal, iterations=2)
+
+mg = cv2.morphologyEx(mask, cv2.MORPH_GRADIENT, kernal)
+
+### Smoothing the Edges ###
+
+blurred = cv2.GaussianBlur(closed, (3,3), 0)
+_, final_mask = cv2.threshold(blurred, 127,255, cv2.THRESH_BINARY)
+
+### Visualization Part ###
+
+# titles = ['image', 'mask', 'closed', 'final_mask']
+# images = [img, mask, closed, final_mask]
+
+# for i in range(4):
+#     plt.subplot(2, 2, i+1), plt.imshow(images [i], 'gray')
+#     plt.title(titles[i])
+#     plt.xticks([]),plt.yticks([])
+
+# plt.show()
+
+def clean_roof_mask(raw_mask):
+    """
+    Binarize the input image of the satellite.
+    Remove noize and fill gaps using morphology.
+    Smooth edges using gaussian refinement.
+    Returns: (final_mask)
+    """
+    # Threshold
+    _, binary =cv2.threshold(raw_mask, 220, 255, cv2.THRESH_BINARY_INV)
+
+    # Define a square kernal (brush) - tweak size if dialation isn't clean
+    kernal = np.ones((8,8), np.uint8)
+
+    # performs Dilation followed by Erosion
+    closed = cv2.morphologyEx(raw_mask, cv2.MORPH_CLOSE, kernal, iterations=2)
+
+    #Smoothing the Edges #
+    blurred = cv2.GaussianBlur(closed, (3,3), 0)
+    _, final_mask = cv2.threshold(blurred, 127,255, cv2.THRESH_BINARY)
+
+    return final_mask
+
+### Geometric Vectorization ###
+
+## Identify external contours ##
+
+# cv2.RETR_EXTERNAL ignores holes inside of the mask and only grabs the outermost boundary of the roof
+# cv2.CHAIN_APPROX_SIMPLE stores endpoints instead of every pixel along a straight line 
+contours, _ = cv2.findContours(final_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+## Select the Primary Roof ##
+
+# Sort by area descending and pick the largest contour (primary roof)
+main_roof_countour = max(contours, key=cv2.contourArea)
+
+## Simplify the Geometry ##
+
+perimeter = cv2.arcLength(main_roof_countour, True)
+
+epsilon = 0.01 * perimeter
+
+simplified_roof = cv2.approxPolyDP(main_roof_countour, epsilon, True)
+
+## Review the Corner Count
+num_corners = len(simplified_roof)
+print(f"Number of corners detected: {num_corners}")
+
+if num_corners == 4:
+    print("Shape: Simple Rectangle")
+elif num_corners == 6:
+    print("Shape: L-Shaped or T-Shaped roof")
+elif num_corners > 8:
+    print("Shape: Complex Multi-level roof")
+
+def vectorize_roof(final_mask, epsilon_factor=0.1):
+    """
+    Converts a binary mask into a simplified geometric polygon.
+    Returns: (simplified_roof, corner_count)
+    """
+    ## Identify external contours ##
+
+    # cv2.RETR_EXTERNAL ignores holes inside of the mask and only grabs the outermost boundary of the roof
+    # cv2.CHAIN_APPROX_SIMPLE stores endpoints instead of every pixel along a straight line 
+    contours, _ = cv2.findContours(final_mask.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return None, 0
+    
+    ## Sort by area descending and pick the largest contour (primary roof)
+    main_roof_countour = max(contours, key=cv2.contourArea)
+
+    ## Simplify the Geometry ##
+    perimeter = cv2.arcLength(main_roof_countour, True)
+    epsilon = epsilon_factor * perimeter
+    simplified_roof = cv2.approxPolyDP(main_roof_countour, epsilon, True)
+
+    ## Extract Corner Count
+    corner_count = len(simplified_roof)
+
+    return simplified_roof, corner_count
+
+
+
+
+
