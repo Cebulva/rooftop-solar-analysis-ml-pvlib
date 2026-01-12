@@ -28,6 +28,7 @@ dependencies:
   - folium==0.20.0
   - mercantile
   - geopy
+  - scikit-image==0.26.0
   # - pyproj
 
 # --- MACHINE LEARNING & COMPUTER VISION ---
