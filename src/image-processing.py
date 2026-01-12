@@ -1,6 +1,8 @@
 import cv2
+import math
 import numpy as np
 from matplotlib import pyplot as plt
+from skimage.measure import label, regionprops
 
 ### Mask Refienment - Morphology ###
 
@@ -125,6 +127,70 @@ def vectorize_roof(final_mask, epsilon_factor=0.1):
     return simplified_roof, corner_count
 
 
+"""
+Calculates the compass orientation of the roof.
+Returns: azimuth_degrees (float)
+"""
 
+## Label the components
+label_img = label(final_mask)
+# regionprops() calculates everything from the center of mass (centroid) to the orientation.
+props = regionprops(label_img)
 
+# Sort through all labeled objects and pick the one with the largest area.
+main_roof = max(props, key=lambda x: x.area)
 
+# Finds the "Major Axis" (the longest line you could draw through the roof). 
+# The orientation is the angle between that Major Axis and the vertical axis of the image.
+angle_rad = main_roof.orientation
+
+# Convert Radians to Degrees
+angle_deg = math.degrees(angle_rad)
+
+"""
+1. Converts radians (0.78) to degrees (45°)
+2. + 90: Shifts the coordinate system so that "Up" (North) 
+aligns with the vertical axis of your satellite image.
+3. % 180: Because a roof is a line, the major axis points in two directions 
+(e.g., North AND South). For now, we find the line of the roof.
+"""
+azimuth = (math.degrees(angle_rad) + 90) %180
+
+def calculate_roof_azimuth(final_mask):
+    """
+    Calculates the compass orientation of the roof.
+    Returns: azimuth_degrees (float)
+    """
+
+    ## Label the components
+    label_img = label(final_mask)
+    # regionprops() calculates everything from the center of mass (centroid) to the orientation.
+    props = regionprops(label_img)
+
+    if not props:
+            return 0.0
+    
+    # Sort through all labeled objects and pick the one with the largest area.
+    main_roof = max(props, key=lambda x: x.area)
+
+    # Finds the "Major Axis" (the longest line you could draw through the roof). 
+    # The orientation is the angle between that Major Axis and the vertical axis of the image.
+    angle_rad = main_roof.orientation
+
+    # Convert Radians to Degrees
+    angle_deg = math.degrees(angle_rad)
+
+    """
+    1. Converts radians (0.78) to degrees (45°)
+    2. + 90: Shifts the coordinate system so that "Up" (North) 
+    aligns with the vertical axis of your satellite image.
+    3. % 180: Because a roof is a line, the major axis points in two directions 
+    (e.g., North AND South). For now, we find the line of the roof.
+    """
+    azimuth = (math.degrees(angle_rad) + 90) %180
+
+    # Note: Because a roof line is symmetrical, this gives the 'axis'.
+    # For solar, we usually assume the panels face 'out' toward the nearest gutter.
+    return azimuth
+
+print(f"Azimuth: {azimuth}")
