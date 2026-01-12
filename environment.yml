@@ -9,9 +9,9 @@ dependencies:
   - pip
 
 # --- CORE WEB APP ---
-  # - streamlit==1.52.0
+  - streamlit==1.52.0
   # - python-dotenv==1.2.1
-  # - Pillow==12.1.0
+  - Pillow==12.1.0
 
 # --- DATA SCIENCE & PHYSICS ---
   - numpy==2.2.6
@@ -25,7 +25,9 @@ dependencies:
 # --- MAPPING & GEOMETRY ---
   - geopandas
   - shapely==2.1.2
-  # - folium==0.20.0
+  - folium==0.20.0
+  - mercantile
+  - geopy
   # - pyproj
 
 # --- MACHINE LEARNING & COMPUTER VISION ---
@@ -34,7 +36,7 @@ dependencies:
   # - scikit-learn==1.8.0
   # - rasterio
 
-# --- AI & RAG CHATBOT ---
+# --- AI & RAG CHATBOT ----
   # - pytorch
   # - llama-index
   # - llama-index-core
