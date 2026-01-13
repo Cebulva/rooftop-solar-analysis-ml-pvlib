@@ -2,6 +2,7 @@ name: solar-env
 channels:
   - conda-forge
   - defaults
+  - pytorch   # added victoria for PyTorch / MPS
 
 dependencies:
 # === Conda Packages ===
@@ -21,6 +22,8 @@ dependencies:
   - matplotlib==3.10.8
   # - plotly==6.5.1
   # - scipy
+  - scikit-learn            # uncommented victoria
+  - ipywidgets              # added victoria
 
 # --- MAPPING & GEOMETRY ---
   - geopandas
@@ -32,13 +35,15 @@ dependencies:
   # - pyproj
 
 # --- MACHINE LEARNING & COMPUTER VISION ---
+  - pytorch                # uncommented / added victoria
+  - torchvision            # uncommented / added victoria
+  - torchaudio             # uncommented / added victoria (for MPS)
+  - tqdm                   # uncommented / added victoria
   # - tensorflow
   # - scikit-image==0.26.0
-  # - scikit-learn==1.8.0
   # - rasterio
 
 # --- AI & RAG CHATBOT ----
-  # - pytorch
   # - llama-index
   # - llama-index-core
   # - sentence-transformers
@@ -53,6 +58,7 @@ dependencies:
 # === Pip Packages ===
   - pip:
     - llama-index-llms-google-genai
-    # - faiss-cpu==1.13.2               # Vector database for your legal docs
+    # - faiss-cpu==1.13.2
     - opencv-python-headless==4.12.0.88
     - streamlit-folium==0.25.3
+    - segmentation-models-pytorch   # added victoria
