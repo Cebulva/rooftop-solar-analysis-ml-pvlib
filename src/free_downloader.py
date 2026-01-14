@@ -1,3 +1,8 @@
+"""
+Satellite image downloader module.
+Downloads satellite tiles from Esri World Imagery service.
+"""
+
 import mercantile
 import requests
 import io
@@ -7,6 +12,15 @@ import math
 def get_free_satellite_image(lat, lon, zoom=19, filename="my_property.png"):
     """
     Downloads the satellite tile for a specific location from Esri World Imagery.
+    
+    Args:
+        lat: Latitude in degrees
+        lon: Longitude in degrees
+        zoom: Zoom level (default 19 for high detail)
+        filename: Output filename for the image
+    
+    Returns:
+        str: Filename if successful, None if failed
     """
     
     # 1. Convert Lat/Lon to Tile Coordinates (X, Y, Z)
@@ -37,6 +51,13 @@ def get_free_satellite_image(lat, lon, zoom=19, filename="my_property.png"):
 def calculate_gsd(lat, zoom):
     """
     Calculates the Ground Sample Distance (meters per pixel).
+    
+    Args:
+        lat: Latitude in degrees
+        zoom: Zoom level
+    
+    Returns:
+        float: Meters per pixel
     """
     # Convert latitude to radians
     lat_rad = math.radians(lat)
