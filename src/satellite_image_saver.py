@@ -13,14 +13,14 @@ import pandas as pd
 import sys
 from pathlib import Path
 
-csv_path = "data/coordinates_for_labeling.csv"
-
 # Adds the project root to the path so 'src' can be found
 root = str(Path(__file__).resolve().parent.parent)
 if root not in sys.path:
     sys.path.append(root)
 
 from src.get_satellite_image import (get_aerial_image_tensor)
+
+csv_path = "data/coordinates_for_labeling.csv"
 
 def save_aerial_data(lat, lon, zoom, size, filename="tile_1.png"):
     # 1. Ensure the directory exists
