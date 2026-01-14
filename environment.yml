@@ -32,6 +32,7 @@ dependencies:
   - mercantile
   - geopy
   - scikit-image==0.26.0
+  - osmnx                   # added for building analysis (OpenStreetMap)
   # - pyproj
 
 # --- MACHINE LEARNING & COMPUTER VISION ---
@@ -62,3 +63,5 @@ dependencies:
     - opencv-python-headless==4.12.0.88
     - streamlit-folium==0.25.3
     - segmentation-models-pytorch   # added victoria
+    - pysolar                 # added for shadow/sun position analysis
+                     
