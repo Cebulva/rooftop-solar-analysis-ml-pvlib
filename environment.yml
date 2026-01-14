@@ -40,6 +40,7 @@ dependencies:
   - torchvision            # uncommented / added victoria
   - torchaudio             # uncommented / added victoria (for MPS)
   - tqdm                   # uncommented / added victoria
+  - pycocotools            # Added for labeling
   # - tensorflow
   # - scikit-image==0.26.0
   - rasterio                # uncommented victoria
