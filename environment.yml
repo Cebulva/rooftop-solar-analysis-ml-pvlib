@@ -42,7 +42,7 @@ dependencies:
   - tqdm                   # uncommented / added victoria
   # - tensorflow
   # - scikit-image==0.26.0
-  # - rasterio
+  - rasterio                # uncommented victoria
 
 # --- AI & RAG CHATBOT ----
   # - llama-index
