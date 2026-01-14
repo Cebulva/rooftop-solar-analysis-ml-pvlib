@@ -99,53 +99,44 @@ if satellite_img is not None:
     plt.show()
 
 def generate_all_masks(json_path, img_dir, output_dir):
-    # 1. Create the output directory if it doesn't exist
     Path(output_dir).mkdir(parents=True, exist_ok=True)
-    
-    # 2. Initialize COCO
     coco = COCO(json_path)
     img_ids = coco.getImgIds()
     
-    print(f"Found {len(img_ids)} images. Starting mask generation...")
+    print(f"Found {len(img_ids)} images. Starting priority mask generation...")
 
     for img_id in img_ids:
-        # 3. Get image metadata
         img_metadata = coco.loadImgs(img_id)[0]
         file_name = img_metadata['file_name']
-        
-        # 4. Create blank mask based on image dimensions
-        height = img_metadata['height']
-        width = img_metadata['width']
-        mask = np.zeros((height, width), dtype=np.uint8)
+        mask = np.zeros((img_metadata['height'], img_metadata['width']), dtype=np.uint8)
 
-        # 5. Get and draw all polygons for this image
         ann_ids = coco.getAnnIds(imgIds=img_id)
         annotations = coco.loadAnns(ann_ids)
 
+        # --- THE FIX: SORT BY PRIORITY ---
+        # We sort so that Class 1 (Roof) is processed LAST.
+        # This way, if a shadow (Class 4) and a roof (Class 1) share a pixel,
+        # the roof will overwrite the shadow.
+        annotations.sort(key=lambda x: 1 if x['category_id'] == 1 else 0)
+
         for ann in annotations:
-            # Safety checks for broken polygons
             if 'segmentation' not in ann or not ann['segmentation']:
-                continue
-            if isinstance(ann['segmentation'], list) and len(ann['segmentation'][0]) < 6:
                 continue
             
             try:
                 category_id = ann['category_id']
                 pixel_mask = coco.annToMask(ann)
+                # Overwrite pixels with the current category_id
                 mask[pixel_mask == 1] = category_id
             except Exception as e:
                 print(f"Error on annotation {ann['id']}: {e}")
 
-        # 6. Save the mask as a PNG
-        # We use the same filename as the image but save it in the masks folder
-        # Important: Use .convert("L") for a single-channel grayscale mask
+        # Save the fixed mask
         mask_filename = os.path.splitext(file_name)[0] + ".png"
         mask_path = os.path.join(output_dir, mask_filename)
+        Image.fromarray(mask).save(mask_path)
         
-        mask_img = Image.fromarray(mask)
-        mask_img.save(mask_path)
-        
-    print(f"Done! All masks saved to: {output_dir}")
+    print(f"Done! All fixed masks saved to: {output_dir}")
 
 # --- EXECUTION ---
 generate_all_masks(
