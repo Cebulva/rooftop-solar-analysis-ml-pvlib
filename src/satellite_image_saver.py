@@ -7,9 +7,13 @@ import numpy as np
 import requests
 
 import torch
+import pandas as pd
+
 
 import sys
 from pathlib import Path
+
+csv_path = "data/coordinates.csv"
 
 # Adds the project root to the path so 'src' can be found
 root = str(Path(__file__).resolve().parent.parent)
@@ -39,11 +43,26 @@ def save_aerial_data(lat, lon, zoom, size, filename="tile_1.png"):
     Image.fromarray(img_to_save).save(save_path)
     print(f"Successfully saved image to: {save_path}")
 
-# --- EXECUTION ---
-save_aerial_data(
-    lat=53.634869813414404, 
-    lon=10.090849074245684, 
-    zoom=19, 
-    size=400,
-    filename="tile_1.png"
-)
+# # --- EXECUTION Single IMG ---
+# save_aerial_data(
+#     lat=53.634869813414404, 
+#     lon=10.090849074245684, 
+#     zoom=19, 
+#     size=400,
+#     filename="tile_1.png"
+# )
+
+def download_batch_from_csv(csv_path):
+    df = pd.read_csv(csv_path)
+    
+    for index, row in df.iterrows():
+        lat = row['lat']
+        lon = row['lon']
+        
+        # Automatically generate a unique filename using the row index
+        file_name = f"satellite_tile_{index}.png"
+        
+        save_aerial_data(lat=lat, lon=lon, zoom=19, size=400, filename=file_name)
+
+# --- EXECUTION list ---
+download_batch_from_csv(csv_path)
