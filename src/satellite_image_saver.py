@@ -8,6 +8,14 @@ import requests
 
 import torch
 
+import sys
+from pathlib import Path
+
+# Adds the project root to the path so 'src' can be found
+root = str(Path(__file__).resolve().parent.parent)
+if root not in sys.path:
+    sys.path.append(root)
+
 from src.get_satellite_image import (get_aerial_image_tensor)
 
 def save_aerial_data(lat, lon, zoom, size, filename="tile_1.png"):
