@@ -1,2 +1,4 @@
 .DS_Store
 /src/__pycache__
+/data/images
+/data/masks
