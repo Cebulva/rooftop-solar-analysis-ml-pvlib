@@ -13,7 +13,7 @@ import pandas as pd
 import sys
 from pathlib import Path
 
-csv_path = "data/coordinates.csv"
+csv_path = "data/coordinates_for_labeling.csv"
 
 # Adds the project root to the path so 'src' can be found
 root = str(Path(__file__).resolve().parent.parent)
