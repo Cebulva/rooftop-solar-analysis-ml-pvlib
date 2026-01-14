@@ -36,9 +36,9 @@ class BinaryRoofDataset(Dataset):
         mask_np = np.array(mask_multi)
 
         # --- THE BINARY FILTER ---
-        # Class 1 is 'Roof'. We set everything else to 0.
-        # This focuses the AI entirely on rooftops again.
-        binary_mask = np.where(mask_np == 1, 1, 0).astype(np.float32)
+        # Class 1 is 'Roof', Class 2 is 'Shadow'
+        # We want the AI to see BOTH as the "Target Area"
+        binary_mask = np.where((mask_np == 1) | (mask_np == 2), 1, 0).astype(np.float32)
         
         if self.transform:
             image = self.transform(image)
@@ -91,7 +91,9 @@ def run_binary_training():
 
     print(f"Fine-tuning on {len(dataset)} hand-labeled images...")
     model.train()
-    for epoch in range(20):
+
+    epoch_range = 100
+    for epoch in range(epoch_range):
         epoch_loss = 0
         for images, masks in loader:
             images, masks = images.to(device), masks.to(device)
@@ -104,7 +106,7 @@ def run_binary_training():
             
             epoch_loss += loss.item()
         
-        print(f"Epoch {epoch+1}/20 | Binary Loss: {epoch_loss/len(loader):.4f}")
+        print(f"Epoch {epoch+1}/{epoch_range} | Binary Loss: {epoch_loss/len(loader):.4f}")
 
     # Save the improved version
     torch.save(model.state_dict(), "models/final_refined_roof_model.pth")
