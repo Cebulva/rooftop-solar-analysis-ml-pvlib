@@ -1,3 +1,4 @@
 # Auto detect text files and perform LF normalization
 * text=auto
 *.pth filter=lfs diff=lfs merge=lfs -text
+models/custom_ds_roof_model.pth filter=lfs diff=lfs merge=lfs -text
