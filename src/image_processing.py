@@ -227,3 +227,41 @@ def refine_and_analyze(raw_mask):
     azimuth = (math.degrees(main_roof.orientation) + 90) % 180
 
     return simplified_poly, azimuth, final_mask
+
+def filter_non_roof_objects(mask_8u):
+    # Find all separate detected objects
+    contours, _ = cv2.findContours(mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    
+    # Calibration Settings
+    MIN_ROOF_AREA = 300   
+    MAX_ROOF_AREA = 10000 
+    
+    cleaned_mask = np.zeros_like(mask_8u)
+    
+    print(f"\n--- 🔍 Geometric Filtering Log (Found {len(contours)} objects) ---")
+    
+    for i, cnt in enumerate(contours):
+        area = cv2.contourArea(cnt)
+        x, y, w, h = cv2.boundingRect(cnt)
+        aspect_ratio = float(w)/h if h > 0 else 0
+        
+        # Determine if it passes the test
+        is_correct_size = (MIN_ROOF_AREA < area < MAX_ROOF_AREA)
+        is_correct_shape = (0.15 < aspect_ratio < 6.0)
+
+        if is_correct_size and is_correct_shape:
+            status = "✅ KEPT"
+            cv2.drawContours(cleaned_mask, [cnt], -1, 255, -1)
+        else:
+            status = "❌ FILTERED"
+            # Help you understand WHY it was filtered
+            reason = ""
+            if not is_correct_size: reason += f"Area {area} out of range | "
+            if not is_correct_shape: reason += f"Aspect Ratio {aspect_ratio:.2f} weird"
+            print(f"Object {i}: {status} -> {reason}")
+            continue
+
+        print(f"Object {i}: {status} -> Area: {int(area)}, Aspect Ratio: {aspect_ratio:.2f}")
+                
+    print("---------------------------------------------------\n")
+    return cleaned_mask
