@@ -229,39 +229,44 @@ def refine_and_analyze(raw_mask):
     return simplified_poly, azimuth, final_mask
 
 def filter_non_roof_objects(mask_8u):
-    # Find all separate detected objects
     contours, _ = cv2.findContours(mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return np.zeros_like(mask_8u)
+
+    # 1. Identify the center of your 400x400 image
+    img_center = np.array([200, 200])
     
-    # Calibration Settings
-    MIN_ROOF_AREA = 300   
-    MAX_ROOF_AREA = 10000 
-    
-    cleaned_mask = np.zeros_like(mask_8u)
-    
-    print(f"\n--- 🔍 Geometric Filtering Log (Found {len(contours)} objects) ---")
-    
+    best_cnt = None
+    min_dist = float('inf')
+
+    print(f"\n--- 📍 Centroid Proximity Log ---")
+
     for i, cnt in enumerate(contours):
         area = cv2.contourArea(cnt)
-        x, y, w, h = cv2.boundingRect(cnt)
-        aspect_ratio = float(w)/h if h > 0 else 0
-        
-        # Determine if it passes the test
-        is_correct_size = (MIN_ROOF_AREA < area < MAX_ROOF_AREA)
-        is_correct_shape = (0.15 < aspect_ratio < 6.0)
-
-        if is_correct_size and is_correct_shape:
-            status = "✅ KEPT"
-            cv2.drawContours(cleaned_mask, [cnt], -1, 255, -1)
-        else:
-            status = "❌ FILTERED"
-            # Help you understand WHY it was filtered
-            reason = ""
-            if not is_correct_size: reason += f"Area {area} out of range | "
-            if not is_correct_shape: reason += f"Aspect Ratio {aspect_ratio:.2f} weird"
-            print(f"Object {i}: {status} -> {reason}")
+        if area < 300: # Ignore tiny noise
             continue
 
-        print(f"Object {i}: {status} -> Area: {int(area)}, Aspect Ratio: {aspect_ratio:.2f}")
-                
-    print("---------------------------------------------------\n")
+        # 2. Calculate the center of this specific object (Centroid)
+        M = cv2.moments(cnt)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+            centroid = np.array([cX, cY])
+            
+            # 3. Calculate distance from image center to object center
+            dist = np.linalg.norm(centroid - img_center)
+            
+            print(f"Object {i}: Area {int(area)} | Distance from center: {dist:.1f}px")
+
+            # 4. We keep the one closest to the target coordinates
+            if dist < min_dist:
+                min_dist = dist
+                best_cnt = cnt
+
+    # 5. Create a mask containing ONLY the best object
+    cleaned_mask = np.zeros_like(mask_8u)
+    if best_cnt is not None:
+        print(f"🏆 Selected Object closest to coordinates.")
+        cv2.drawContours(cleaned_mask, [best_cnt], -1, 255, -1)
+    
     return cleaned_mask
