@@ -52,7 +52,7 @@ st.title("🌍 Satellite Solar Potential Selector")
 
 # --- 1. SESSION STATE SETUP ---
 if "map_center" not in st.session_state:
-    st.session_state["map_center"] = [37.7749, -122.4194] # Default: San Francisco
+    st.session_state["map_center"] = [52.4985, 13.4379]  # Default: Cuvrystraße 1, 10997 Berlin, Germany
 if "selected_pos" not in st.session_state:
     st.session_state["selected_pos"] = None
 
@@ -62,7 +62,7 @@ geolocator = Nominatim(user_agent="solar_project_team_app_v1")
 with st.form("search_form"):
     col1, col2 = st.columns([4, 1])
     with col1:
-        address_input = st.text_input("Search Address", placeholder="e.g. 1600 Amphitheatre Parkway, Mountain View, CA")
+        address_input = st.text_input("Search Address", placeholder="e.g. Musterweg 123, 10115 Berlin, Germany")
     with col2:
         search_submitted = st.form_submit_button("🔍 Search")
 
@@ -80,7 +80,11 @@ if search_submitted and address_input:
         st.error(f"Error: {e}")
 
 # --- 3. MAP RENDERING ---
-center_lat, center_lon = st.session_state["map_center"]
+# Use selected position as center if available, otherwise use map_center
+if st.session_state["selected_pos"]:
+    center_lat, center_lon = st.session_state["selected_pos"]
+else:
+    center_lat, center_lon = st.session_state["map_center"]
 m = folium.Map(location=[center_lat, center_lon], zoom_start=19)
 
 # Satellite Tiles
