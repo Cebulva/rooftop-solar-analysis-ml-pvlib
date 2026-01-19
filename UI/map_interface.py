@@ -30,8 +30,7 @@ try:
     from solar_analysis import analyze_solar_potential
     from shadow_analysis import calculate_sun_angles, calculate_daily_sun_exposure, get_optimal_panel_angle
     from building_analysis import analyze_building_solar_potential
-    from roof_solar_heatmap import RoofSolarHeatmap
-    from osm_to_roof_heatmap import OSMRoofHeatmap
+    from leaflet_shadow_integration import render_shadow_map, calculate_shadow_metrics
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.error(f"sys.path: {sys.path}")
@@ -125,14 +124,86 @@ if st.session_state["selected_pos"]:
     st.divider()
     st.header("✅ Selected Coordinates")
     
-    c1, c2, c3 = st.columns(3)
+    c1, c2 = st.columns(2)
     with c1:
         st.metric("Latitude", f"{lat:.6f}")
     with c2:
         st.metric("Longitude", f"{lon:.6f}")
-    
+
+    # --- REAL-TIME SHADOW VISUALIZATION ---
+    st.divider()
+    st.header("🌓 Real-Time Shadow & Sun Exposure Simulator")
+
+    st.info("""
+    **Interactive Shadow Visualization**
+
+    This map shows real-time shadows cast by buildings and terrain at your location. You can:
+    - Use +1/-1 Hour buttons to see shadows at different times of day
+    - Click Play to animate shadow movement throughout the day
+    - Enable "Full-day sun exposure" to see cumulative sunlight (blue = less sun, red = more sun)
+    - Zoom in to see detailed building shadows (zoom > 15 for building data)
+
+    This helps identify optimal solar panel placement by showing which roof areas receive the most sunlight!
+    """)
+
+    # Shadow metrics in columns
+    shadow_metrics = calculate_shadow_metrics(lat, lon)
+
+    if 'error' not in shadow_metrics:
+        col_shadow1, col_shadow2, col_shadow3, col_shadow4 = st.columns(4)
+
+        with col_shadow1:
+            st.metric(
+                "Current Sun Altitude",
+                f"{shadow_metrics['current_altitude']:.1f}°",
+                help="Angle of sun above horizon"
+            )
+
+        with col_shadow2:
+            st.metric(
+                "Current Sun Azimuth",
+                f"{shadow_metrics['current_azimuth']:.1f}°",
+                help="Direction from North (0°=N, 90°=E, 180°=S, 270°=W)"
+            )
+
+        with col_shadow3:
+            st.metric(
+                "Daylight Hours Today",
+                f"{shadow_metrics['daylight_hours']:.1f} hrs",
+                help="Total hours of sunlight today"
+            )
+
+        with col_shadow4:
+            status = "☀️ Daytime" if shadow_metrics['is_daytime'] else "🌙 Nighttime"
+            st.metric("Current Status", status)
+
+        # Display sunrise/sunset times
+        if shadow_metrics['sunrise'] and shadow_metrics['sunset']:
+            col_time1, col_time2 = st.columns(2)
+            with col_time1:
+                st.write(f"🌅 **Sunrise:** {shadow_metrics['sunrise'].strftime('%I:%M %p')}")
+            with col_time2:
+                st.write(f"🌇 **Sunset:** {shadow_metrics['sunset'].strftime('%I:%M %p')}")
+
+    # Render the interactive shadow map
+    st.subheader("📍 Interactive Shadow Map")
+    render_shadow_map(lat, lon, height=600)
+
+    st.markdown("""
+    <small>
+    💡 **Tips:**
+    - Areas that stay bright throughout the day are best for solar panels
+    - Shadows from nearby buildings significantly reduce solar efficiency
+    - The "Full-day sun exposure" mode shows cumulative sunlight - red areas get the most sun!
+    </small>
+    """, unsafe_allow_html=True)
+
     # --- THE ANALYZE BUTTON ---
-    with c3:
+    st.divider()
+    st.header("📊 Detailed Solar Analysis")
+
+    col_btn = st.columns([1, 1, 1])
+    with col_btn[1]:
         if st.button("Confirm & Analyze", key="analyze_btn"):
             
             with st.spinner("Fetching satellite weather data & running simulation..."):
@@ -311,292 +382,3 @@ if st.session_state["selected_pos"]:
             
             st.info(f"📏 Scale: This image is approx. **{image_width_meters:.1f} meters** wide.")
     
-    # ========================================
-    # ROOF SOLAR HEATMAP SECTION
-    # ========================================
-    st.divider()
-    st.subheader("🔥 Advanced: Solar Exposure Heatmap")
-    
-    st.info("""
-    **Automatically generate solar heatmap from building data!**
-    
-    This uses the building geometry from OpenStreetMap (same data as the Building Analysis above) 
-    to create a roof segmentation and calculate solar exposure.
-    
-    No manual image upload needed! 🎉
-    """)
-    
-    # Heatmap options
-    col_opt1, col_opt2 = st.columns(2)
-    
-    with col_opt1:
-        heatmap_type = st.radio(
-            "Analysis Period:",
-            ["Daily (Today)", "Yearly (Annual Average)"],
-            key="osm_heatmap_type",
-            help="Daily: Shows sun exposure for today. Yearly: Shows average exposure throughout the year."
-        )
-        
-        multi_building = st.checkbox(
-            "Include all nearby buildings",
-            value=False,
-            help="If checked, generates heatmap for all buildings in the area. Otherwise, only the clicked building."
-        )
-    
-    with col_opt2:
-        colormap_choice = st.selectbox(
-            "Color Scheme:",
-            ["hot", "plasma", "viridis", "inferno", "magma", "jet"],
-            key="osm_colormap",
-            help="Choose the color scheme for the heatmap"
-        )
-        
-        image_resolution = st.select_slider(
-            "Image Resolution:",
-            options=[0.25, 0.5, 1.0, 2.0],
-            value=0.5,
-            format_func=lambda x: f"{x} m/pixel",
-            help="Lower = higher detail but slower processing"
-        )
-    
-    # Generate heatmap button
-    if st.button("🔥 Generate Solar Heatmap from Building Data", key="generate_osm_heatmap"):
-        with st.spinner("Generating solar heatmap from OpenStreetMap building data... This may take a moment."):
-            try:
-                # Initialize OSM heatmap generator
-                osm_heatmap = OSMRoofHeatmap(
-                    lat, 
-                    lon, 
-                    image_size=512, 
-                    meters_per_pixel=image_resolution
-                )
-                
-                # Generate heatmap
-                results = osm_heatmap.generate_heatmap_from_osm(
-                    heatmap_type='yearly' if 'Yearly' in heatmap_type else 'daily',
-                    multi_building=multi_building,
-                    search_radius=100,
-                    samples_per_month=2
-                )
-                
-                if not results['success']:
-                    st.error(f"❌ {results['error']}")
-                    if results['error'] == 'No buildings found in this area':
-                        st.info("💡 This location may not have building data in OpenStreetMap. Try clicking on a building in an urban area, or upload a manual roof segmentation image below.")
-                else:
-                    st.success(f"✅ Heatmap generated successfully! Found {results['num_buildings']} building(s)")
-                    
-                    # Display results
-                    st.subheader("📊 Results")
-                    
-                    # Show roof segmentation and heatmap side by side
-                    col_img1, col_img2 = st.columns(2)
-                    
-                    with col_img1:
-                        st.write("**Roof Segmentation (from OSM)**")
-                        st.image(results['roof_image'], use_column_width=True, caption="Building footprints from OpenStreetMap")
-                    
-                    with col_img2:
-                        st.write("**Solar Exposure Heatmap**")
-                        import matplotlib.pyplot as plt
-                        
-                        fig, ax = plt.subplots(figsize=(6, 6))
-                        im = ax.imshow(results['heatmap'], cmap=colormap_choice, vmin=0, vmax=1)
-                        ax.axis('off')
-                        plt.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='Solar Exposure')
-                        st.pyplot(fig)
-                        plt.close()
-                    
-                    # Building information
-                    if results['buildings_info']:
-                        with st.expander("🏠 Building Details"):
-                            for i, bldg in enumerate(results['buildings_info'], 1):
-                                st.write(f"**Building {i}:**")
-                                st.write(f"- Type: {bldg.get('type', 'unknown')}")
-                                if bldg.get('height'):
-                                    st.write(f"- Height: {bldg['height']} m")
-                                if bldg.get('area_m2'):
-                                    st.write(f"- Area: {bldg['area_m2']:.1f} m²")
-                                if bldg.get('name') and bldg.get('name') != 'Unknown':
-                                    st.write(f"- Name: {bldg['name']}")
-                                st.write("---")
-                    
-                    # Exposure zones analysis
-                    st.subheader("📊 Roof Exposure Analysis")
-                    zones = results['zones']
-                    
-                    zone_data = []
-                    for zone_name, data in zones.items():
-                        zone_data.append({
-                            'Zone': zone_name,
-                            'Exposure Range': f"{data['exposure_range'][0]:.2f} - {data['exposure_range'][1]:.2f}",
-                            'Coverage': f"{data['percentage']:.1f}%",
-                            'Avg Exposure': f"{data['avg_exposure']:.3f}"
-                        })
-                    
-                    import pandas as pd
-                    zone_df = pd.DataFrame(zone_data)
-                    st.dataframe(zone_df, use_container_width=True)
-                    
-                    # Optimal panel locations
-                    st.subheader("⚡ Optimal Solar Panel Locations")
-                    
-                    num_panels = st.slider(
-                        "Number of panels to place:",
-                        min_value=1,
-                        max_value=50,
-                        value=10,
-                        key="osm_panel_count",
-                        help="Find the best locations for this many solar panels"
-                    )
-                    
-                    # Recalculate with user-specified panel count
-                    optimal_locs = results['generator'].find_optimal_panel_locations(
-                        results['heatmap'], 
-                        panel_count=num_panels,
-                        min_exposure=0.5
-                    )
-                    
-                    if optimal_locs:
-                        # Create overlay
-                        overlay = results['generator'].create_overlay_heatmap(
-                            results['heatmap'], 
-                            colormap=colormap_choice
-                        )
-                        
-                        # Draw green circles at optimal locations
-                        import cv2
-                        for y, x in optimal_locs:
-                            cv2.circle(overlay, (x, y), 8, (0, 255, 0), 2)
-                            cv2.circle(overlay, (x, y), 2, (0, 255, 0), -1)
-                        
-                        st.image(
-                            overlay, 
-                            caption=f"Optimal locations for {len(optimal_locs)} solar panels (marked in green)",
-                            use_column_width=True
-                        )
-                        st.success(f"✅ Found {len(optimal_locs)} optimal panel locations with good sun exposure")
-                    else:
-                        st.warning("⚠️ No suitable locations found with minimum exposure threshold of 0.5")
-                    
-                    # Download buttons
-                    st.subheader("📥 Download Results")
-                    
-                    col_dl1, col_dl2 = st.columns(2)
-                    
-                    with col_dl1:
-                        # Download heatmap
-                        import io
-                        buf = io.BytesIO()
-                        fig_dl = plt.figure(figsize=(10, 8))
-                        plt.imshow(results['heatmap'], cmap=colormap_choice, vmin=0, vmax=1)
-                        plt.title(f"Solar Exposure Heatmap - ({lat:.4f}, {lon:.4f})")
-                        plt.colorbar(label='Solar Exposure')
-                        plt.axis('off')
-                        plt.savefig(buf, format='png', dpi=300, bbox_inches='tight')
-                        buf.seek(0)
-                        plt.close()
-                        
-                        st.download_button(
-                            label="📥 Download Heatmap",
-                            data=buf,
-                            file_name=f"solar_heatmap_{lat}_{lon}.png",
-                            mime="image/png"
-                        )
-                    
-                    with col_dl2:
-                        # Download roof segmentation
-                        buf_roof = io.BytesIO()
-                        import cv2
-                        cv2.imwrite('temp_roof.png', results['roof_image'])
-                        with open('temp_roof.png', 'rb') as f:
-                            buf_roof = io.BytesIO(f.read())
-                        os.remove('temp_roof.png')
-                        
-                        st.download_button(
-                            label="📥 Download Roof Segmentation",
-                            data=buf_roof,
-                            file_name=f"roof_segmentation_{lat}_{lon}.png",
-                            mime="image/png"
-                        )
-            
-            except Exception as e:
-                st.error(f"Error generating heatmap: {e}")
-                import traceback
-                st.code(traceback.format_exc())
-    
-    # Optional: Manual upload section for locations without OSM data
-    st.divider()
-    with st.expander("🎨 Alternative: Upload Custom Roof Segmentation"):
-        st.write("""
-        If building data is not available in OpenStreetMap for your location, 
-        you can manually upload a black & white image where:
-        - **White pixels** = Roof areas
-        - **Black pixels** = Everything else
-        """)
-        
-        uploaded_roof = st.file_uploader(
-            "Upload Roof Segmentation Image (PNG/JPG)", 
-            type=['png', 'jpg', 'jpeg'],
-            key="manual_roof_upload"
-        )
-        
-        if uploaded_roof is not None:
-            st.image(uploaded_roof, width=300, caption="Your uploaded roof segmentation")
-            
-            manual_heatmap_type = st.radio(
-                "Analysis Period:",
-                ["Daily", "Yearly"],
-                key="manual_heatmap_type"
-            )
-            
-            manual_colormap = st.selectbox(
-                "Color Scheme:",
-                ["hot", "plasma", "viridis", "inferno", "magma", "jet"],
-                key="manual_colormap"
-            )
-            
-            if st.button("🔥 Generate from Uploaded Image", key="generate_manual_heatmap"):
-                with st.spinner("Generating heatmap from uploaded image..."):
-                    try:
-                        # Save uploaded file temporarily
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp_file:
-                            tmp_file.write(uploaded_roof.getvalue())
-                            temp_path = tmp_file.name
-                        
-                        # Initialize heatmap generator
-                        generator = RoofSolarHeatmap(lat, lon, temp_path)
-                        
-                        # Generate heatmap
-                        if manual_heatmap_type == "Daily":
-                            heatmap = generator.create_daily_heatmap()
-                            title = f"Daily Solar Exposure - {datetime.now().strftime('%Y-%m-%d')}"
-                        else:
-                            heatmap = generator.create_yearly_heatmap(samples_per_month=2)
-                            title = "Annual Average Solar Exposure"
-                        
-                        # Visualize
-                        import matplotlib.pyplot as plt
-                        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
-                        
-                        ax1.imshow(generator.roof_mask, cmap='gray')
-                        ax1.set_title('Your Roof Segmentation')
-                        ax1.axis('off')
-                        
-                        im = ax2.imshow(heatmap, cmap=manual_colormap, vmin=0, vmax=1)
-                        ax2.set_title(title)
-                        ax2.axis('off')
-                        plt.colorbar(im, ax=ax2, fraction=0.046, pad=0.04, label='Solar Exposure')
-                        
-                        st.pyplot(fig)
-                        plt.close()
-                        
-                        # Clean up
-                        os.unlink(temp_path)
-                        
-                        st.success("✅ Manual heatmap generated successfully!")
-                        
-                    except Exception as e:
-                        st.error(f"Error: {e}")
-                        import traceback
-                        st.code(traceback.format_exc())
