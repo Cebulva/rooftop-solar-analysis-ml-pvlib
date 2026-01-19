@@ -31,6 +31,13 @@ try:
     from shadow_analysis import calculate_sun_angles, calculate_daily_sun_exposure, get_optimal_panel_angle
     from building_analysis import analyze_building_solar_potential
     from leaflet_shadow_integration import render_shadow_map, calculate_shadow_metrics
+    from german_solar_calculator import (
+        GermanSolarCalculator,
+        ORIENTATION_MAP,
+        TILT_MAP,
+        get_consumption_breakdown,
+        CONSTANTS
+    )
 except ImportError as e:
     st.error(f"Import Error: {e}")
     st.error(f"sys.path: {sys.path}")
@@ -201,6 +208,189 @@ if st.session_state["selected_pos"]:
     - The "Full-day sun exposure" mode shows cumulative sunlight - red areas get the most sun!
     </small>
     """, unsafe_allow_html=True)
+
+    # --- CONSUMPTION QUESTIONNAIRE ---
+    st.divider()
+    st.header("🏠 Your Household & Roof Information")
+    st.info("""
+    **Tell us about your home to get personalized solar recommendations!**
+
+    We'll estimate your electricity consumption based on German Stromspiegel 2025 data
+    and calculate the optimal solar system size for your needs.
+    """)
+
+    with st.form("consumption_form"):
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.subheader("🔌 Your Consumption")
+
+            building_type = st.selectbox(
+                "Building Type",
+                ["Single Family House", "Apartment"],
+                help="Houses typically have higher consumption than apartments"
+            )
+
+            people = st.slider(
+                "Number of People in Household",
+                min_value=1,
+                max_value=6,
+                value=3,
+                help="More people = higher electricity consumption"
+            )
+
+            st.markdown("**High-Power Appliances:**")
+            has_water_heater = st.checkbox(
+                "Electric Water Heater (Durchlauferhitzer)",
+                help="Adds ~1,000 kWh/year"
+            )
+            has_ev = st.checkbox(
+                "Electric Vehicle (with home charging)",
+                help="Adds ~2,500 kWh/year for ~15,000 km"
+            )
+            has_heat_pump = st.checkbox(
+                "Heat Pump",
+                help="Adds ~3,500 kWh/year"
+            )
+
+        with col_right:
+            st.subheader("☀️ Your Roof")
+
+            roof_orientation = st.selectbox(
+                "Roof Orientation",
+                list(ORIENTATION_MAP.keys()),
+                index=0,  # Default to South
+                help="South-facing roofs get the most sun in Germany"
+            )
+
+            roof_tilt = st.selectbox(
+                "Roof Tilt Angle",
+                list(TILT_MAP.keys()),
+                index=2,  # Default to Normal (35)
+                help="35° is optimal for most German locations"
+            )
+
+            # Show consumption breakdown preview
+            st.markdown("---")
+            st.markdown("**Estimated Consumption Preview:**")
+            b_type = 'house' if 'House' in building_type else 'apt'
+            breakdown = get_consumption_breakdown(
+                people, b_type, has_water_heater, has_ev, has_heat_pump
+            )
+            for item, kwh in breakdown.items():
+                if item == 'Total':
+                    st.markdown(f"**{item}: {kwh:,} kWh/year**")
+                else:
+                    st.write(f"- {item}: {kwh:,} kWh")
+
+        calculate_solar = st.form_submit_button("☀️ Calculate Solar Recommendation", use_container_width=True)
+
+    # Process the form submission
+    if calculate_solar:
+        with st.spinner("Calculating your personalized solar recommendation..."):
+            # Initialize calculator with selected location
+            calc = GermanSolarCalculator(lat, lon)
+
+            # Get building type code
+            b_type = 'house' if 'House' in building_type else 'apt'
+
+            # Run full analysis
+            analysis = calc.full_analysis(
+                people=people,
+                building_type=b_type,
+                roof_orientation=roof_orientation,
+                roof_tilt=roof_tilt,
+                has_water_heater=has_water_heater,
+                has_ev=has_ev,
+                has_heat_pump=has_heat_pump
+            )
+
+            # Store in session state for later use
+            st.session_state['solar_analysis'] = analysis
+
+            # Display Results
+            st.success("Solar Analysis Complete!")
+            st.divider()
+
+            # === RECOMMENDATION HEADER ===
+            st.subheader(f"Recommended System: {analysis['system']['recommended_kwp']} kWp")
+
+            # Key Metrics Row
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+
+            with col_m1:
+                st.metric(
+                    "Your Annual Consumption",
+                    f"{analysis['consumption']['annual_kwh']:,} kWh",
+                    help="Based on Stromspiegel 2025"
+                )
+
+            with col_m2:
+                st.metric(
+                    "Solar Production",
+                    f"{int(analysis['production']['annual_kwh']):,} kWh",
+                    help="Based on PVGIS satellite data"
+                )
+
+            with col_m3:
+                st.metric(
+                    "Investment Cost",
+                    f"{int(analysis['economics']['invest_cost']):,} EUR",
+                    "0% VAT",
+                    help="Including installation, 0% VAT for residential solar"
+                )
+
+            with col_m4:
+                roi = analysis['economics']['roi_years']
+                if roi < 10:
+                    st.metric("Payback Period", f"{roi:.1f} years", delta="Good investment!")
+                else:
+                    st.metric("Payback Period", f"{roi:.1f} years")
+
+            # Coverage Progress Bar
+            st.divider()
+            coverage = min(analysis['coverage']['ratio'], 1.0)
+            st.progress(coverage, text=f"Coverage: {analysis['coverage']['percent']:.0f}% of your consumption")
+
+            if analysis['coverage']['percent'] >= 100:
+                st.success(f"This system covers 100% of your annual consumption with {int(analysis['coverage']['surplus_kwh']):,} kWh surplus!")
+            else:
+                st.info(f"This system covers {analysis['coverage']['percent']:.0f}% of your needs. You'll still need {int(analysis['coverage']['deficit_kwh']):,} kWh from the grid.")
+
+            # Financial Details
+            st.divider()
+            col_fin1, col_fin2 = st.columns(2)
+
+            with col_fin1:
+                st.subheader("💶 Annual Savings Breakdown")
+                st.write(f"**Electricity cost savings:** {int(analysis['economics']['savings_usage']):,} EUR/year")
+                st.write(f"**Feed-in tariff (EEG):** {int(analysis['economics']['earnings_feedin']):,} EUR/year")
+                st.markdown(f"### Total: {int(analysis['economics']['annual_benefit']):,} EUR/year")
+                st.caption(f"Monthly benefit: ~{int(analysis['economics']['monthly_benefit']):,} EUR")
+
+            with col_fin2:
+                st.subheader("📊 System Details")
+                st.write(f"**Number of panels:** {analysis['system']['num_panels']} x {analysis['system']['panel_power_w']}W")
+                st.write(f"**Required roof area:** {analysis['system']['required_roof_area_m2']:.1f} m²")
+                st.write(f"**Specific yield:** {analysis['production']['specific_yield_kwh_kwp']:.0f} kWh/kWp")
+                st.write(f"**Orientation:** {analysis['system']['roof_orientation']}")
+                st.write(f"**Tilt:** {analysis['system']['roof_tilt']}")
+
+            # 25-year profit
+            st.divider()
+            lifetime_profit = analysis['economics']['lifetime_profit_25y']
+            if lifetime_profit > 0:
+                st.success(f"**25-Year Net Profit:** {int(lifetime_profit):,} EUR (after system pays itself off)")
+            else:
+                st.warning(f"**25-Year Net Result:** {int(lifetime_profit):,} EUR")
+
+            # Tips
+            st.info("""
+            💡 **Tips to increase savings:**
+            - Add a battery storage to increase self-consumption from 30% to 60-70%
+            - Use high-power appliances (washing machine, dishwasher) during sunny hours
+            - Consider an EV to utilize surplus solar production
+            """)
 
     # --- THE ANALYZE BUTTON ---
     st.divider()
