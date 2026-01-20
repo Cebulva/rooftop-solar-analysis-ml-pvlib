@@ -228,6 +228,23 @@ def refine_and_analyze(raw_mask):
 
     return simplified_poly, azimuth, final_mask
 
+def get_zoom_crop(image, mask, padding=40):
+    # Find coordinates of all mask pixels
+    coords = cv2.findNonZero(mask.astype(np.uint8))
+    x, y, w, h = cv2.boundingRect(coords)
+
+    # Add padding so the roof isn't touching the edge of the screen
+    start_x = max(0, x - padding)
+    start_y = max(0, y - padding)
+    end_x = min(image.shape[1], x + w + padding)
+    end_y = min(image.shape[0], y + h + padding)
+
+    # Crop both the satellite image and the mask
+    cropped_img = image[start_y:end_y, start_x:end_x]
+    cropped_mask = mask[start_y:end_y, start_x:end_x]
+    
+    return cropped_img, cropped_mask, (start_x, start_y)
+
 def filter_non_roof_objects(mask_8u):
     contours, _ = cv2.findContours(mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
