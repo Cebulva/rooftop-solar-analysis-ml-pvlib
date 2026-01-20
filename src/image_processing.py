@@ -229,7 +229,12 @@ def refine_and_analyze(raw_mask):
     return simplified_poly, azimuth, final_mask
 
 def get_zoom_crop(image, mask, padding=40):
-    # Find coordinates of all mask pixels
+    """
+    Crops the image and mask to focus on the detected roof.
+    Returns the cropped image, cropped mask, and the (x, y) offsets.
+    """
+
+   # Find coordinates of all mask pixels
     coords = cv2.findNonZero(mask.astype(np.uint8))
     x, y, w, h = cv2.boundingRect(coords)
 
@@ -287,3 +292,19 @@ def filter_non_roof_objects(mask_8u):
         cv2.drawContours(cleaned_mask, [best_cnt], -1, 255, -1)
     
     return cleaned_mask
+
+def format_poly_for_canvas(poly_points):
+    """Converts [[x,y], [x,y]] points into a Streamlit Canvas path string."""
+    if poly_points is None or len(poly_points) == 0:
+        return None
+    
+    path_data = []
+    for i, pt in enumerate(poly_points):
+        # 'M' starts the path, 'L' draws lines to subsequent points
+        command = "M" if i == 0 else "L"
+        path_data.append([command, float(pt[0]), float(pt[1])])
+    
+    path_data.append(["Z"]) # 'Z' closes the polygon
+    
+    # Return in the specific dictionary format the component expects
+    return {"objects": [{"type": "path", "path": path_data, "stroke": "#00FFFF", "fill": "rgba(0, 255, 255, 0.3)"}]}
