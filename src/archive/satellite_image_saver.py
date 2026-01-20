@@ -18,7 +18,7 @@ root = str(Path(__file__).resolve().parent.parent)
 if root not in sys.path:
     sys.path.append(root)
 
-from src.get_satellite_image import (get_aerial_image_tensor)
+from src.map_utils import (get_aerial_image_tensor)
 
 csv_path = "data/coordinates_for_labeling.csv"
 
