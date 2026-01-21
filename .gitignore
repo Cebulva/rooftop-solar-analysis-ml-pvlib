@@ -4,3 +4,4 @@
 /data/masks
 *.png
 cache
+app_working_copy.py
