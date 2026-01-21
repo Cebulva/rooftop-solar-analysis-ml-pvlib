@@ -164,151 +164,114 @@ elif st.session_state.step == 2:
                         st.session_state.sub_step = "adjust"
                         st.rerun()
 
-    # --- SUB-STEP B: DRAG-TO-ADJUST MODE ---
+    # --- SUB-STEP B: INTEGRATED DRAGGABLE EDITOR (Stable Version) ---
     elif st.session_state.sub_step == "adjust":
-        st.subheader("Step 2b: Adjust Roof Boundary")
+        st.subheader("Step 2b: Refine Roof Vertices")
 
-        # 1. Prepare background image (clean, no overlay)
         bg_for_editor = Image.fromarray(base_resized)
 
-        # 2. Create initial drawing as individual draggable circles for each vertex
+        # 1. Initialization (Only runs once)
         if "adjust_canvas_init" not in st.session_state.data:
-            if res['initial_poly'] is not None and len(res['initial_poly']) > 0:
-                # Scale points to display size
-                scaled_pts = [{"x": p[0] * scaling_factor, "y": p[1] * scaling_factor}
-                              for p in res['initial_poly']]
+            scaled_pts = [{"x": p[0] * scaling_factor, "y": p[1] * scaling_factor} 
+                          for p in res['initial_poly']]
+            
+            objects = []
+            path_str = "M " + " L ".join([f"{p['x']} {p['y']}" for p in scaled_pts]) + " Z"
+            objects.append({
+                "type": "path", "path": path_str,
+                "fill": "rgba(0, 255, 255, 0.3)", "stroke": "#00FFFF", "strokeWidth": 2,
+                "selectable": False, "evented": False, "name": "mask_fill"
+            })
+            for i, pt in enumerate(scaled_pts):
+                objects.append({
+                    "type": "circle", "left": pt['x'] - 8, "top": pt['y'] - 8,
+                    "radius": 8, "fill": "#00FFFF", "stroke": "#000000",
+                    "strokeWidth": 2, "selectable": True, "hasControls": False,
+                    "hasBorders": False, "name": f"v_{i:03d}"
+                })
+            st.session_state.data["adjust_canvas_init"] = {"version": "4.4.0", "objects": objects}
 
-                # Create circle objects for each vertex (draggable control points)
-                objects = []
-                for i, pt in enumerate(scaled_pts):
-                    objects.append({
-                        "type": "circle",
-                        "left": pt['x'] - 8,  # Center the circle on the point
-                        "top": pt['y'] - 8,
-                        "radius": 8,
-                        "fill": "#00FFFF",
-                        "stroke": "#000000",
-                        "strokeWidth": 2,
-                        "selectable": True,
-                        "hasControls": False,  # No resize handles, just move
-                        "hasBorders": False,
-                        "lockScalingX": True,
-                        "lockScalingY": True,
-                        "lockRotation": True,
-                        "name": f"vertex_{i:03d}"  # Zero-padded for proper sorting
-                    })
-
-                initial_drawing = {
-                    "version": "4.4.0",
-                    "objects": objects
-                }
-                st.session_state.data["adjust_canvas_init"] = initial_drawing
-                st.session_state.data["vertex_count"] = len(scaled_pts)
-
-        # 3. Layout: [Spacer, Editor, Controls/Stats]
         col_L, col_center, col_dash = st.columns([1, 4, 1.5])
 
-        # Canvas for dragging vertices
         with col_center:
             canvas_result = st_canvas(
-                fill_color="#00FFFF",
-                stroke_width=2,
-                stroke_color="#000000",
                 background_image=bg_for_editor,
                 initial_drawing=st.session_state.data.get("adjust_canvas_init"),
                 drawing_mode="transform",
-                point_display_radius=0,
+                display_toolbar=False,
                 update_streamlit=True,
                 height=display_h,
                 width=DISPLAY_WIDTH,
-                key="vertex_drag_canvas",
+                key="integrated_editor_vFinal",
             )
-            st.info("🎯 Click and drag the cyan circles to move vertices.")
 
-        # Extract current vertex positions from circles
-        extracted_pts = None
-        extracted_pts_scaled = None
-
-        if canvas_result.json_data and canvas_result.json_data["objects"]:
-            circles = [obj for obj in canvas_result.json_data["objects"] if obj.get("type") == "circle"]
-
+        # 2. SELECTIVE UPDATE LOGIC (Stops the Loop)
+        extracted_pts_raw = []
+        if canvas_result.json_data and "objects" in canvas_result.json_data:
+            circles = [obj for obj in canvas_result.json_data["objects"] if obj["type"] == "circle"]
+            circles = sorted(circles, key=lambda c: c.get("name", ""))
+            
             if circles:
-                circles_sorted = sorted(circles, key=lambda c: c.get("name", "vertex_999"))
+                has_moved = False
+                new_pts_scaled = []
+                
+                for i, c in enumerate(circles):
+                    # Get current pos from canvas
+                    curr_x = c["left"] + 8
+                    curr_y = c["top"] + 8
+                    
+                    # Get previous pos from session state
+                    prev_x = st.session_state.data["adjust_canvas_init"]["objects"][i+1]["left"] + 8
+                    prev_y = st.session_state.data["adjust_canvas_init"]["objects"][i+1]["top"] + 8
+                    
+                    # Check for movement (using a 0.5px threshold to ignore micro-jitters)
+                    if abs(curr_x - prev_x) > 0.5 or abs(curr_y - prev_y) > 0.5:
+                        has_moved = True
+                    
+                    new_pts_scaled.append({"x": curr_x, "y": curr_y})
+                    extracted_pts_raw.append([curr_x / scaling_factor, curr_y / scaling_factor])
 
-                extracted_pts = []
-                extracted_pts_scaled = []
-                for c in circles_sorted:
-                    # Scaled coordinates for display
-                    center_x_scaled = c.get('left', 0) + 8
-                    center_y_scaled = c.get('top', 0) + 8
-                    extracted_pts_scaled.append([center_x_scaled, center_y_scaled])
-
-                    # Original coordinates for saving
-                    center_x = center_x_scaled / scaling_factor
-                    center_y = center_y_scaled / scaling_factor
-                    extracted_pts.append([center_x, center_y])
-
-        # Show live preview of the polygon shape below the canvas
-        with col_center:
-            st.caption("**Live Preview** - Polygon updates as you drag vertices:")
-
-            # Create live preview image
-            live_preview = base_resized.copy()
-
-            if extracted_pts_scaled and len(extracted_pts_scaled) >= 3:
-                # Draw the current polygon based on dragged circle positions
-                current_pts = np.array(extracted_pts_scaled).astype(np.int32)
-
-                # Semi-transparent cyan fill
-                overlay_layer = live_preview.copy()
-                cv2.fillPoly(overlay_layer, [current_pts], (0, 255, 255))
-                live_preview = cv2.addWeighted(live_preview, 0.6, overlay_layer, 0.4, 0)
-
-                # Draw outline
-                cv2.polylines(live_preview, [current_pts], isClosed=True, color=(0, 200, 200), thickness=2)
-
-                # Draw vertex markers with numbers
-                for i, pt in enumerate(extracted_pts_scaled):
-                    cv2.circle(live_preview, (int(pt[0]), int(pt[1])), 8, (255, 255, 0), -1)
-                    cv2.circle(live_preview, (int(pt[0]), int(pt[1])), 8, (0, 0, 0), 1)
-                    # Add vertex number
-                    cv2.putText(live_preview, str(i+1), (int(pt[0])-4, int(pt[1])+4),
-                               cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
-
-            st.image(live_preview, width=DISPLAY_WIDTH)
+                # ONLY update state if something actually moved
+                if has_moved:
+                    new_path_str = "M " + " L ".join([f"{p['x']} {p['y']}" for p in new_pts_scaled]) + " Z"
+                    st.session_state.data["adjust_canvas_init"]["objects"][0]["path"] = new_path_str
+                    for i, p in enumerate(new_pts_scaled):
+                        st.session_state.data["adjust_canvas_init"]["objects"][i+1]["left"] = p["x"] - 8
+                        st.session_state.data["adjust_canvas_init"]["objects"][i+1]["top"] = p["y"] - 8
+                    
+                    # Trigger a single rerun to lock in the new state
+                    st.rerun()
 
         with col_dash:
             st.markdown("### 📊 Metrics")
-
-            if extracted_pts and len(extracted_pts) >= 3:
-                area = cv2.contourArea(np.array(extracted_pts).astype(np.float32)) * (GSD_19**2)
-                st.metric("Roof Area", f"{area:.1f} m²")
-                st.write(f"**Vertices:** {len(extracted_pts)}")
-
+            if extracted_pts_raw:
+                area = cv2.contourArea(np.array(extracted_pts_raw).astype(np.float32)) * (GSD_19**2)
+                st.metric("Refined Area", f"{area:.1f} m²")
+                
                 st.divider()
-                st.markdown("### Actions")
-
-                if st.button("💾 Save Changes", type="primary", use_container_width=True):
-                    st.session_state.data["final_poly"] = extracted_pts
-                    st.session_state.sub_step = "verify_custom"
-                    st.rerun()
-
-                if st.button("🔄 Reset to AI", use_container_width=True):
-                    # Clear the canvas initialization to reload AI polygon
+                st.write("### Actions")
+                
+                # --- NEW BUTTON: TRIGGER DRAW NEW ---
+                if st.button("✨ Draw from Scratch", use_container_width=True):
+                    # Clear the draggable state so it doesn't conflict
                     if "adjust_canvas_init" in st.session_state.data:
                         del st.session_state.data["adjust_canvas_init"]
+                    st.session_state.sub_step = "draw_new"
                     st.rerun()
 
-            # Option to draw completely new shape
-            st.divider()
-            if st.button("✏️ Draw New Shape", use_container_width=True):
-                st.session_state.sub_step = "draw_new"
-                st.rerun()
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("💾 Save", type="primary", use_container_width=True):
+                        st.session_state.data["final_poly"] = extracted_pts_raw
+                        st.session_state.sub_step = "verify_custom"
+                        st.rerun()
+                with c2:
+                    if st.button("🔄 Reset", use_container_width=True):
+                        if "adjust_canvas_init" in st.session_state.data:
+                            del st.session_state.data["adjust_canvas_init"]
+                        st.rerun()
 
-            st.divider()
             if st.button("⬅️ Back", use_container_width=True):
-                if "adjust_canvas_init" in st.session_state.data:
-                    del st.session_state.data["adjust_canvas_init"]
                 st.session_state.sub_step = "verify"
                 st.rerun()
 
@@ -365,26 +328,18 @@ elif st.session_state.step == 2:
     elif st.session_state.sub_step == "verify_custom":
         st.subheader("Step 2c: Confirm Your Manual Mask")
         
-        # 1. Standardized Layout [Spacer, Content, Dashboard/Spacer]
         col_L, col_center, col_R = st.columns([1, 4, 1.5])
         
         with col_center:
-            # Prepare the preview image
             final_preview = base_resized.copy()
-            # Scale user points to match DISPLAY_WIDTH
             user_pts = (np.array(st.session_state.data["final_poly"]) * scaling_factor).astype(np.int32)
             
-            # Create the Cyan overlay (RGB: 0, 255, 255)
             mask_layer = final_preview.copy()
             cv2.fillPoly(mask_layer, [user_pts], (0, 255, 255))
-            
-            # Consistent blending (0.6 original, 0.4 mask)
             final_preview = cv2.addWeighted(final_preview, 0.6, mask_layer, 0.4, 0)
             
-            # Display the centered image
             st.image(final_preview, width=DISPLAY_WIDTH, caption="Your Refined Mask")
             
-            # 2. Centered Button Logic to match BUTTON_SIZE_VERIFY
             gap_ratio = (DISPLAY_WIDTH - BUTTON_SIZE_VERIFY) / 2
             _, sub_col, _ = st.columns([gap_ratio, BUTTON_SIZE_VERIFY, gap_ratio])
             
@@ -396,5 +351,21 @@ elif st.session_state.step == 2:
                         st.rerun()
                 with btn_right:
                     if st.button("🔄 Redraw", use_container_width=True):
+                        # --- THE FIX: Convert current final_poly into the new initial state ---
+                        current_pts = st.session_state.data["final_poly"]
+                        scaled_pts = [{"x": p[0] * scaling_factor, "y": p[1] * scaling_factor} for p in current_pts]
+                        
+                        path_str = "M " + " L ".join([f"{p['x']} {p['y']}" for p in scaled_pts]) + " Z"
+                        objects = [{"type": "path", "path": path_str, "fill": "rgba(0, 255, 255, 0.3)", 
+                                    "stroke": "#00FFFF", "strokeWidth": 2, "selectable": False, "evented": False}]
+                        
+                        for i, pt in enumerate(scaled_pts):
+                            objects.append({"type": "circle", "left": pt['x'] - 8, "top": pt['y'] - 8,
+                                            "radius": 8, "fill": "#00FFFF", "stroke": "#000000",
+                                            "strokeWidth": 2, "selectable": True, "hasControls": False, 
+                                            "name": f"v_{i:03d}"})
+                        
+                        # Set this as the new starting point for the 'adjust' step
+                        st.session_state.data["adjust_canvas_init"] = {"version": "4.4.0", "objects": objects}
                         st.session_state.sub_step = "adjust"
                         st.rerun()
