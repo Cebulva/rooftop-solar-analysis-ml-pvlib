@@ -250,6 +250,15 @@ elif st.session_state.step == 2:
                 
                 st.divider()
                 st.write("### Actions")
+                
+                # --- NEW BUTTON: TRIGGER DRAW NEW ---
+                if st.button("✨ Draw from Scratch", use_container_width=True):
+                    # Clear the draggable state so it doesn't conflict
+                    if "adjust_canvas_init" in st.session_state.data:
+                        del st.session_state.data["adjust_canvas_init"]
+                    st.session_state.sub_step = "draw_new"
+                    st.rerun()
+
                 c1, c2 = st.columns(2)
                 with c1:
                     if st.button("💾 Save", type="primary", use_container_width=True):
@@ -261,6 +270,10 @@ elif st.session_state.step == 2:
                         if "adjust_canvas_init" in st.session_state.data:
                             del st.session_state.data["adjust_canvas_init"]
                         st.rerun()
+
+            if st.button("⬅️ Back", use_container_width=True):
+                st.session_state.sub_step = "verify"
+                st.rerun()
 
     # --- SUB-STEP B2: DRAW NEW SHAPE FROM SCRATCH ---
     elif st.session_state.sub_step == "draw_new":
@@ -315,26 +328,18 @@ elif st.session_state.step == 2:
     elif st.session_state.sub_step == "verify_custom":
         st.subheader("Step 2c: Confirm Your Manual Mask")
         
-        # 1. Standardized Layout [Spacer, Content, Dashboard/Spacer]
         col_L, col_center, col_R = st.columns([1, 4, 1.5])
         
         with col_center:
-            # Prepare the preview image
             final_preview = base_resized.copy()
-            # Scale user points to match DISPLAY_WIDTH
             user_pts = (np.array(st.session_state.data["final_poly"]) * scaling_factor).astype(np.int32)
             
-            # Create the Cyan overlay (RGB: 0, 255, 255)
             mask_layer = final_preview.copy()
             cv2.fillPoly(mask_layer, [user_pts], (0, 255, 255))
-            
-            # Consistent blending (0.6 original, 0.4 mask)
             final_preview = cv2.addWeighted(final_preview, 0.6, mask_layer, 0.4, 0)
             
-            # Display the centered image
             st.image(final_preview, width=DISPLAY_WIDTH, caption="Your Refined Mask")
             
-            # 2. Centered Button Logic to match BUTTON_SIZE_VERIFY
             gap_ratio = (DISPLAY_WIDTH - BUTTON_SIZE_VERIFY) / 2
             _, sub_col, _ = st.columns([gap_ratio, BUTTON_SIZE_VERIFY, gap_ratio])
             
@@ -346,5 +351,21 @@ elif st.session_state.step == 2:
                         st.rerun()
                 with btn_right:
                     if st.button("🔄 Redraw", use_container_width=True):
+                        # --- THE FIX: Convert current final_poly into the new initial state ---
+                        current_pts = st.session_state.data["final_poly"]
+                        scaled_pts = [{"x": p[0] * scaling_factor, "y": p[1] * scaling_factor} for p in current_pts]
+                        
+                        path_str = "M " + " L ".join([f"{p['x']} {p['y']}" for p in scaled_pts]) + " Z"
+                        objects = [{"type": "path", "path": path_str, "fill": "rgba(0, 255, 255, 0.3)", 
+                                    "stroke": "#00FFFF", "strokeWidth": 2, "selectable": False, "evented": False}]
+                        
+                        for i, pt in enumerate(scaled_pts):
+                            objects.append({"type": "circle", "left": pt['x'] - 8, "top": pt['y'] - 8,
+                                            "radius": 8, "fill": "#00FFFF", "stroke": "#000000",
+                                            "strokeWidth": 2, "selectable": True, "hasControls": False, 
+                                            "name": f"v_{i:03d}"})
+                        
+                        # Set this as the new starting point for the 'adjust' step
+                        st.session_state.data["adjust_canvas_init"] = {"version": "4.4.0", "objects": objects}
                         st.session_state.sub_step = "adjust"
                         st.rerun()
