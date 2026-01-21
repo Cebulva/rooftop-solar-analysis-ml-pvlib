@@ -1,9 +1,9 @@
 name: solar-env
 channels:
-  - pytorch           # Priority 1: Official ML binaries (best for MPS/CUDA)
-  - conda-forge       # Priority 2: Community packages
-  - defaults          # Priority 3: Standard Anaconda packages
-  
+  - conda-forge
+  - defaults
+  - pytorch   # added victoria for PyTorch / MPS
+
 dependencies:
 # === Conda Packages ===
   - python=3.12
@@ -20,7 +20,7 @@ dependencies:
   - pvlib==0.13.1
   - pandas==2.3.3
   - matplotlib==3.10.8
-  - matplotlib-base         # added for complete heatmap visualization support
+  - matplotlib-base           # added for complete heatmap visualization support
   # - plotly==6.5.1
   # - scipy
   - scikit-learn            # uncommented victoria
@@ -43,6 +43,7 @@ dependencies:
   - tqdm                   # uncommented / added victoria
   - pycocotools            # Added for labeling
   # - tensorflow
+  # - scikit-image==0.26.0
   - rasterio                # uncommented victoria
 
 # --- AI & RAG CHATBOT ----
