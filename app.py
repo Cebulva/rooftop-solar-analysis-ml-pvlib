@@ -30,7 +30,7 @@ def get_image_data(lat, lon, zoom):
 
 # --- 2. CONFIGURATION ---
 st.set_page_config(page_title="SolarSight AI", layout="wide")
-MODEL_PATH = "models/segm_Unet_model_aerial.pth"
+MODEL_PATH = "models/model_zoom19.pth"
 AI_ZOOM = 19
 GSD_19 = 0.298 
 
@@ -62,14 +62,16 @@ if st.session_state.step == 1:
     # Data fetching and AI Inference (cached for speed)
     if st.session_state.data.get("key") != coord_key:
         with st.spinner("Fetching stable imagery..."):
-            input_tensor = get_image_data(lat, lon, AI_ZOOM)
-            full_img = input_tensor.squeeze().cpu().numpy().transpose(1, 2, 0)
+            # --- HYBRID OSM + ML MASK ---
+            from src.model_engine import run_roof_pipeline
+            model = get_model(MODEL_PATH)
             
-            from src.model_engine import run_inference
-            mask_np = run_inference(get_model(MODEL_PATH), input_tensor)
+            # Always use same zoom inside run_roof_pipeline
+            gray_mask, source, full_img = run_roof_pipeline(model, lat, lon)
             
             from src.image_processing import filter_non_roof_objects
-            clean_mask = filter_non_roof_objects((mask_np * 255).astype('uint8'))
+            clean_mask = filter_non_roof_objects(gray_mask)
+            # -------------------------------
             
             # Create the initial cyan preview overlay
             overlay = full_img.copy()
