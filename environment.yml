@@ -2,69 +2,52 @@ name: solar-env
 channels:
   - conda-forge
   - defaults
-  - pytorch   # added victoria for PyTorch / MPS
+  - pytorch
 
 dependencies:
-# === Conda Packages ===
+# === Core ===
   - python=3.12
   - pip
 
-# --- CORE WEB APP ---
-  - streamlit==1.52.0
-  # - python-dotenv==1.2.1
-  - Pillow==12.1.0
+# === Data Science & Physics ===
+  - numpy>=2.0             
+  - pandas>=2.3
+  - pvlib                  
+  - scikit-learn
+  - matplotlib>=3.10       
+  - ipywidgets
 
-# --- DATA SCIENCE & PHYSICS ---
-  - numpy==2.2.6
-  # - numba==0.63.1
-  - pvlib==0.13.1
-  - pandas==2.3.3
-  - matplotlib==3.10.8
-  - matplotlib-base           # added for complete heatmap visualization support
-  # - plotly==6.5.1
-  # - scipy
-  - scikit-learn            # uncommented victoria
-  - ipywidgets              # added victoria
-
-# --- MAPPING & GEOMETRY ---
+# === Mapping & Geometry ===
   - geopandas
-  - shapely==2.1.2
-  - folium==0.20.0
+  - shapely>=2.1
+  - folium>=0.20
   - mercantile
   - geopy
-  - scikit-image==0.26.0
-  - osmnx                   # added for building analysis (OpenStreetMap)
-  # - pyproj
+  - scikit-image>=0.26
+  - osmnx
+  - pytz                   
 
-# --- MACHINE LEARNING & COMPUTER VISION ---
-  - pytorch                # uncommented / added victoria
-  - torchvision            # uncommented / added victoria
-  - torchaudio             # uncommented / added victoria (for MPS)
-  - tqdm                   # uncommented / added victoria
-  - pycocotools            # Added for labeling
-  # - tensorflow
-  # - scikit-image==0.26.0
-  - rasterio                # uncommented victoria
+# === Machine Learning ===
+  - pytorch                
+  - torchvision
+  - torchaudio
+  - tqdm
+  - pycocotools
+  - rasterio
 
-# --- AI & RAG CHATBOT ----
-  # - llama-index
-  # - llama-index-core
-  # - sentence-transformers
-  # - ragas
-  # - python-dotenv
-  # - pypdf==6.5.0
+# === Web App ===
+  - streamlit>=1.52
+  - Pillow>=12.0
 
-# --- GOOGLE MAPS INTEGRATION ---
-  - googlemaps==4.10.0      # Official Python client for Google Maps services
-  - requests==2.32.5        # Required for handling image downloads from Static API
+# === Google Services ===
+  - googlemaps             
+  - requests
 
 # === Pip Packages ===
   - pip:
     - llama-index-llms-google-genai
-    # - faiss-cpu==1.13.2
     - opencv-python-headless==4.12.0.88
     - streamlit-folium==0.25.3
     - streamlit-drawable-canvas==0.9.3
-    - segmentation-models-pytorch   # added victoria
-    - pysolar>=0.10                 # added for shadow/sun position analysis
-    - pytz                          # added for timezone handling in heatmap generation
+    - segmentation-models-pytorch   
+    - pysolar>=0.10                 

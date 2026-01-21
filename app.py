@@ -164,67 +164,201 @@ elif st.session_state.step == 2:
                         st.session_state.sub_step = "adjust"
                         st.rerun()
 
-    # --- SUB-STEP B: GHOSTED ADJUSTMENT ---
+    # --- SUB-STEP B: DRAG-TO-ADJUST MODE ---
     elif st.session_state.sub_step == "adjust":
-        st.subheader("Step 2b: Manual Boundary Tracing")
-        
-        # 1. Image preparation
-        ghost_img = base_resized.copy()
-        if res['initial_poly'] is not None and len(res['initial_poly']) > 0:
-            ai_pts = (np.array(res['initial_poly']) * scaling_factor).astype(np.int32)
-            guide_overlay = ghost_img.copy()
-            cv2.polylines(guide_overlay, [ai_pts], isClosed=True, color=(255, 255, 0), thickness=2)
-            ghost_img = cv2.addWeighted(guide_overlay, 0.6, ghost_img, 0.6, 0)
-        bg_ghost_final = Image.fromarray(ghost_img)
+        st.subheader("Step 2b: Adjust Roof Boundary")
 
-        # 2. Layout: [Spacer, Editor, Controls/Stats]
-        # We use a 0.5 spacer to nudge the editor toward the center
+        # 1. Prepare background image (clean, no overlay)
+        bg_for_editor = Image.fromarray(base_resized)
+
+        # 2. Create initial drawing as individual draggable circles for each vertex
+        if "adjust_canvas_init" not in st.session_state.data:
+            if res['initial_poly'] is not None and len(res['initial_poly']) > 0:
+                # Scale points to display size
+                scaled_pts = [{"x": p[0] * scaling_factor, "y": p[1] * scaling_factor}
+                              for p in res['initial_poly']]
+
+                # Create circle objects for each vertex (draggable control points)
+                objects = []
+                for i, pt in enumerate(scaled_pts):
+                    objects.append({
+                        "type": "circle",
+                        "left": pt['x'] - 8,  # Center the circle on the point
+                        "top": pt['y'] - 8,
+                        "radius": 8,
+                        "fill": "#00FFFF",
+                        "stroke": "#000000",
+                        "strokeWidth": 2,
+                        "selectable": True,
+                        "hasControls": False,  # No resize handles, just move
+                        "hasBorders": False,
+                        "lockScalingX": True,
+                        "lockScalingY": True,
+                        "lockRotation": True,
+                        "name": f"vertex_{i:03d}"  # Zero-padded for proper sorting
+                    })
+
+                initial_drawing = {
+                    "version": "4.4.0",
+                    "objects": objects
+                }
+                st.session_state.data["adjust_canvas_init"] = initial_drawing
+                st.session_state.data["vertex_count"] = len(scaled_pts)
+
+        # 3. Layout: [Spacer, Editor, Controls/Stats]
         col_L, col_center, col_dash = st.columns([1, 4, 1.5])
-        
+
+        # Canvas for dragging vertices
         with col_center:
             canvas_result = st_canvas(
-                fill_color="rgba(0, 255, 255, 0.15)",
-                stroke_width=4,
-                stroke_color="#00FFFF",
-                background_image=bg_ghost_final,
-                drawing_mode="polygon",
-                point_display_radius=4,
+                fill_color="#00FFFF",
+                stroke_width=2,
+                stroke_color="#000000",
+                background_image=bg_for_editor,
+                initial_drawing=st.session_state.data.get("adjust_canvas_init"),
+                drawing_mode="transform",
+                point_display_radius=0,
                 update_streamlit=True,
                 height=display_h,
                 width=DISPLAY_WIDTH,
-                key="tracing_canvas_dashboard",
+                key="vertex_drag_canvas",
             )
-            st.info("🎯 **How to Trace**: Click each corner. **Right-click** the last point to complete the shape.")
+            st.info("🎯 Click and drag the cyan circles to move vertices.")
+
+        # Extract current vertex positions from circles
+        extracted_pts = None
+        extracted_pts_scaled = None
+
+        if canvas_result.json_data and canvas_result.json_data["objects"]:
+            circles = [obj for obj in canvas_result.json_data["objects"] if obj.get("type") == "circle"]
+
+            if circles:
+                circles_sorted = sorted(circles, key=lambda c: c.get("name", "vertex_999"))
+
+                extracted_pts = []
+                extracted_pts_scaled = []
+                for c in circles_sorted:
+                    # Scaled coordinates for display
+                    center_x_scaled = c.get('left', 0) + 8
+                    center_y_scaled = c.get('top', 0) + 8
+                    extracted_pts_scaled.append([center_x_scaled, center_y_scaled])
+
+                    # Original coordinates for saving
+                    center_x = center_x_scaled / scaling_factor
+                    center_y = center_y_scaled / scaling_factor
+                    extracted_pts.append([center_x, center_y])
+
+        # Show live preview of the polygon shape below the canvas
+        with col_center:
+            st.caption("**Live Preview** - Polygon updates as you drag vertices:")
+
+            # Create live preview image
+            live_preview = base_resized.copy()
+
+            if extracted_pts_scaled and len(extracted_pts_scaled) >= 3:
+                # Draw the current polygon based on dragged circle positions
+                current_pts = np.array(extracted_pts_scaled).astype(np.int32)
+
+                # Semi-transparent cyan fill
+                overlay_layer = live_preview.copy()
+                cv2.fillPoly(overlay_layer, [current_pts], (0, 255, 255))
+                live_preview = cv2.addWeighted(live_preview, 0.6, overlay_layer, 0.4, 0)
+
+                # Draw outline
+                cv2.polylines(live_preview, [current_pts], isClosed=True, color=(0, 200, 200), thickness=2)
+
+                # Draw vertex markers with numbers
+                for i, pt in enumerate(extracted_pts_scaled):
+                    cv2.circle(live_preview, (int(pt[0]), int(pt[1])), 8, (255, 255, 0), -1)
+                    cv2.circle(live_preview, (int(pt[0]), int(pt[1])), 8, (0, 0, 0), 1)
+                    # Add vertex number
+                    cv2.putText(live_preview, str(i+1), (int(pt[0])-4, int(pt[1])+4),
+                               cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 0), 1)
+
+            st.image(live_preview, width=DISPLAY_WIDTH)
 
         with col_dash:
             st.markdown("### 📊 Metrics")
+
+            if extracted_pts and len(extracted_pts) >= 3:
+                area = cv2.contourArea(np.array(extracted_pts).astype(np.float32)) * (GSD_19**2)
+                st.metric("Roof Area", f"{area:.1f} m²")
+                st.write(f"**Vertices:** {len(extracted_pts)}")
+
+                st.divider()
+                st.markdown("### Actions")
+
+                if st.button("💾 Save Changes", type="primary", use_container_width=True):
+                    st.session_state.data["final_poly"] = extracted_pts
+                    st.session_state.sub_step = "verify_custom"
+                    st.rerun()
+
+                if st.button("🔄 Reset to AI", use_container_width=True):
+                    # Clear the canvas initialization to reload AI polygon
+                    if "adjust_canvas_init" in st.session_state.data:
+                        del st.session_state.data["adjust_canvas_init"]
+                    st.rerun()
+
+            # Option to draw completely new shape
+            st.divider()
+            if st.button("✏️ Draw New Shape", use_container_width=True):
+                st.session_state.sub_step = "draw_new"
+                st.rerun()
+
+            st.divider()
+            if st.button("⬅️ Back", use_container_width=True):
+                if "adjust_canvas_init" in st.session_state.data:
+                    del st.session_state.data["adjust_canvas_init"]
+                st.session_state.sub_step = "verify"
+                st.rerun()
+
+    # --- SUB-STEP B2: DRAW NEW SHAPE FROM SCRATCH ---
+    elif st.session_state.sub_step == "draw_new":
+        st.subheader("Step 2b: Draw New Roof Boundary")
+
+        bg_for_editor = Image.fromarray(base_resized)
+
+        col_L, col_center, col_dash = st.columns([1, 4, 1.5])
+
+        with col_center:
+            canvas_result = st_canvas(
+                fill_color="rgba(0, 255, 255, 0.25)",
+                stroke_width=3,
+                stroke_color="#00FFFF",
+                background_image=bg_for_editor,
+                drawing_mode="polygon",
+                point_display_radius=5,
+                update_streamlit=True,
+                height=display_h,
+                width=DISPLAY_WIDTH,
+                key="draw_new_canvas",
+            )
+            st.info("🎯 **Draw New**: Click each corner of the roof. **Right-click** or **double-click** the last point to complete.")
+
+        with col_dash:
+            st.markdown("### 📊 Metrics")
+            extracted_pts = None
+
             if canvas_result.json_data and canvas_result.json_data["objects"]:
                 obj = canvas_result.json_data["objects"][-1]
                 path = obj.get("path", [])
-                pts = [[p[1]/scaling_factor, p[2]/scaling_factor] for p in path if len(p) > 2]
-                
-                if pts:
-                    area = cv2.contourArea(np.array(pts).astype(np.float32)) * (GSD_19**2)
-                    st.metric("Custom Area", f"{area:.1f} m²")
-                    st.write(f"**Vertices:** {len(pts)}")
-                    
+                extracted_pts = [[p[1]/scaling_factor, p[2]/scaling_factor]
+                                 for p in path if len(p) > 2]
+
+                if extracted_pts and len(extracted_pts) >= 3:
+                    area = cv2.contourArea(np.array(extracted_pts).astype(np.float32)) * (GSD_19**2)
+                    st.metric("Roof Area", f"{area:.1f} m²")
+                    st.write(f"**Vertices:** {len(extracted_pts)}")
+
                     st.divider()
-                    st.write("### Actions")
-                    # Side-by-side buttons inside the dashboard column
-                    btn_col1, btn_col2 = st.columns(2)
-                    with btn_col1:
-                        if st.button("💾 Save", type="primary", use_container_width=True):
-                            st.session_state.data["final_poly"] = pts
-                            st.session_state.sub_step = "verify_custom"
-                            st.rerun()
-                    with btn_col2:
-                        if st.button("🔄 Clear", use_container_width=True):
-                            # This reloads the canvas by changing the key or rerunning
-                            st.rerun()
-            
+                    if st.button("💾 Save Shape", type="primary", use_container_width=True):
+                        st.session_state.data["final_poly"] = extracted_pts
+                        st.session_state.sub_step = "verify_custom"
+                        st.rerun()
+
             st.divider()
-            if st.button("⬅️ Back to AI", use_container_width=True):
-                st.session_state.sub_step = "verify"
+            if st.button("⬅️ Back to Adjust", use_container_width=True):
+                st.session_state.sub_step = "adjust"
                 st.rerun()
 
     # --- SUB-STEP C: VERIFY CUSTOM MASK ---
