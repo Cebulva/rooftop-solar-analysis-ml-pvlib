@@ -5,3 +5,5 @@
 *.png
 cache
 app_working_copy.py
+/stages/__pycache__
+/__pycache__
