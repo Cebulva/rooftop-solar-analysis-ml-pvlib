@@ -4,9 +4,10 @@ import uuid
 import io
 import streamlit.elements.image as st_image
 
-# --- SHARED UI & STAGES ---
+# --- CUSTOM IMPORTS ---
 import ui_components as ui
 from stages import stage_1_preview, stage_2_refine, stage_3_solar, stage_4_report
+from src import rag_bot
 
 # --- COMPATIBILITY PATCH ---
 if not hasattr(st_image, 'image_to_url'):
@@ -47,3 +48,8 @@ elif st.session_state.step == 3:
 
 elif st.session_state.step == 4:
     stage_4_report.show()
+
+# --- PERSISTENT RAG BOT ---
+# This stays at the bottom so it is globally available
+rag_bot.initialize_chat()
+rag_bot.render_chat_interface()
