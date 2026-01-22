@@ -26,7 +26,6 @@ from datetime import datetime
 
 # Import the modules
 try:
-    from free_downloader import get_free_satellite_image, calculate_gsd
     from solar_analysis import analyze_solar_potential
     from shadow_analysis import calculate_sun_angles, calculate_daily_sun_exposure, get_optimal_panel_angle
     from building_analysis import analyze_building_solar_potential
@@ -552,27 +551,3 @@ if st.session_state["selected_pos"]:
                         st.line_chart(data['Energy Output (kWh/m²)'])
                     
                     st.dataframe(data, use_container_width=True)
-
-    st.divider()
-    st.subheader("📷 Site Snapshot (Free)")
-
-    if st.button("Download Image"):
-        zoom_level = 19
-        safe_filename = f"satellite_{lat}_{lon}.png"
-        
-        saved_file = get_free_satellite_image(lat, lon, zoom=zoom_level, filename=safe_filename)
-        
-        if saved_file:
-            # 1. Calculate Resolution
-            meters_per_pixel = calculate_gsd(lat, zoom_level)
-            
-            # 2. Calculate Total Image Width (Standard tile is 256x256 pixels)
-            image_width_meters = meters_per_pixel * 256
-            
-            st.success(f"Image Downloaded! (Resolution: {meters_per_pixel:.3f} meters/pixel)")
-            
-            # 3. Display Image with Scale Info
-            st.image(saved_file, width=400)
-            
-            st.info(f"📏 Scale: This image is approx. **{image_width_meters:.1f} meters** wide.")
-    
