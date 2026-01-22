@@ -38,7 +38,7 @@ lat, lon = ui.render_sidebar()
 
 # --- ROUTER ---
 if st.session_state.step == 1:
-    stage_1_preview.show(lat, lon, get_model)
+    stage_1_preview.show()
 
 elif st.session_state.step == 2:
     stage_2_refine.show(get_model)
