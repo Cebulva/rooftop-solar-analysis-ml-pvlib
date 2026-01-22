@@ -4,46 +4,50 @@ import cv2
 from PIL import Image
 from streamlit_drawable_canvas import st_canvas
 import ui_components as ui
+from src.ai_pipeline import get_initial_rooftop_data
 
-def show():
-    # 1. Initialize data if coming from Step 1
+def show(get_model):
+    # 1. SILENT INITIALIZATION (Uses the new src/ai_pipeline)
     if "res" not in st.session_state.data:
-        from src.image_processing import get_zoom_crop
-        from src.geometry_utils import mask_to_polygon
-        
-        # USE THE CLEAN IMAGE FOR CROPPING
-        # We use 'full_img' which is the original aerial shot without the cyan tint
-        z_img, z_mask, offsets = get_zoom_crop(
-            st.session_state.data["full_img"], 
-            st.session_state.data["full_mask"]
-        )
-        
-        poly_points = mask_to_polygon(z_mask)
-        st.session_state.data["res"] = {
-            'zoom_img': z_img, 
-            'initial_poly': poly_points, 
-            'offsets': offsets
-        }
-        st.session_state.sub_step = "verify"
+        with st.status("🔍 Analyzing rooftop geometry...", expanded=True) as status:
+            model = get_model(ui.MODEL_PATH)
+            
+            # This calls your new modular backend logic
+            raw_data = get_initial_rooftop_data(
+                model, 
+                st.session_state.data["confirmed_lat"], 
+                st.session_state.data["confirmed_lon"]
+            )
+            
+            # Store in session state so it doesn't run again
+            st.session_state.data["res"] = {
+                'zoom_img': raw_data["zoom_img"],
+                'initial_poly': raw_data["initial_poly"],
+                'offsets': raw_data["offsets"]
+            }
+            # We also store the full image globally for Step 3
+            st.session_state.data["full_img"] = raw_data["full_img"]
+            
+            st.session_state.sub_step = "adjust" # Jump straight to editing
+            status.update(label="Analysis Complete!", state="complete", expanded=False)
+        st.rerun()
 
+    # --- YOUR STABLE UI LOGIC STARTS HERE ---
     res = st.session_state.data["res"]
     
-    # 2. Prepare standardized background image for the editor
-    # This 'res['zoom_img']' is now derived from the clean 'full_img'
+    # 2. Prepare standardized background image
     base_img_uint8 = (res['zoom_img']).astype(np.uint8) 
-    
     h, w = base_img_uint8.shape[:2]
     scaling_factor = ui.DISPLAY_WIDTH / w
     display_h = int(h * scaling_factor)
     
-    # Pre-resize the CLEAN base image for the canvas background
     base_resized = cv2.resize(
         base_img_uint8, 
         (ui.DISPLAY_WIDTH, display_h), 
         interpolation=cv2.INTER_LANCZOS4
     )
 
-    # 3. SUB-STEP ROUTER (This fixes your NameError)
+    # 3. SUB-STEP ROUTER
     if st.session_state.sub_step == "verify":
         render_verify(base_resized, scaling_factor, res)
     elif st.session_state.sub_step == "adjust":
@@ -53,12 +57,11 @@ def show():
     elif st.session_state.sub_step == "verify_custom":
         render_verify_custom(base_resized, scaling_factor)
 
-# --- HELPER RENDER FUNCTIONS ---
+# --- YOUR HELPER FUNCTIONS (Preserved exactly from your working code) ---
 
 def render_verify(base_resized, scaling_factor, res):
     st.subheader("Step 2a: Verify AI Detection")
     col_L, col_center, col_R = st.columns([1, 4, 1.5])
-    
     with col_center:
         preview_draw = base_resized.copy()
         if res['initial_poly'] is not None and len(res['initial_poly']) > 0:
@@ -66,24 +69,19 @@ def render_verify(base_resized, scaling_factor, res):
             mask_layer = preview_draw.copy()
             cv2.fillPoly(mask_layer, [ai_pts], (0, 255, 255))
             preview_draw = cv2.addWeighted(preview_draw, 0.6, mask_layer, 0.4, 0)
-        
         st.image(preview_draw, width=ui.DISPLAY_WIDTH)
         gap = (ui.DISPLAY_WIDTH - ui.BUTTON_SIZE_VERIFY) / 2
         _, sub_col, _ = st.columns([gap, ui.BUTTON_SIZE_VERIFY, gap])
-        
         with sub_col:
             btn_left, btn_right = st.columns(2)
             if btn_left.button("✅ Correct", use_container_width=True, type="primary"):
                 st.session_state.data["final_poly"] = res['initial_poly']
-                st.session_state.step = 3
-                st.rerun()
+                st.session_state.step = 3; st.rerun()
             if btn_right.button("✏️ Adjust", use_container_width=True):
-                st.session_state.sub_step = "adjust"
-                st.rerun()
+                st.session_state.sub_step = "adjust"; st.rerun()
 
 def render_adjust(base_resized, scaling_factor, display_h, res):
     st.subheader("Step 2b: Refine Roof Vertices")
-    
     if "adjust_canvas_init" not in st.session_state.data:
         scaled_pts = [{"x": p[0]*scaling_factor, "y": p[1]*scaling_factor} for p in res['initial_poly']]
         path_str = "M " + " L ".join([f"{p['x']} {p['y']}" for p in scaled_pts]) + " Z"
