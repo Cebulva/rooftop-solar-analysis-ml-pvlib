@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Global Constants
-MODEL_PATH = "models/best_model_zoom19.pth"
+MODEL_PATH = "models/model_zoom19.pth"
 AI_ZOOM = 19
 GSD_19 = 0.298 
 DISPLAY_WIDTH = 700
