@@ -4,6 +4,15 @@ import numpy as np
 from matplotlib import pyplot as plt
 from skimage.measure import label, regionprops
 
+# ==========================================
+# ⚙️ PROCESSING CONFIGURATION (Tweak these)
+# ==========================================
+CROP_PADDING = 40       # Extra space around the roof (px)
+MIN_CROP_SIZE = 220     # Max Zoom Limit (Minimum pixels wide/tall)
+MORPH_KERNEL_SIZE = 8   # Size of the "brush" for cleaning the mask
+EPSILON_FACTOR = 0.02   # Smoothing factor for polygon simplification
+# ==========================================
+
 # ### Mask Refienment - Morphology ###
 
 # raw_mask = cv2.imread('data/images/satellite_tile_0.png', cv2.IMREAD_GRAYSCALE)
@@ -195,60 +204,67 @@ from skimage.measure import label, regionprops
 
 # print(f"Azimuth: {azimuth}")
 
-def refine_and_analyze(raw_mask):
+def refine_and_analyze(raw_mask, kernel_size=MORPH_KERNEL_SIZE, epsilon=EPSILON_FACTOR):
     """
-    The Master Function: Cleans the mask, vectorizes the shape, 
-    and calculates orientation in one go.
+    Cleans the mask and vectorizes using exposed hyperparameters.
     """
-    # 1. Clean & Smooth (Morphology)
     mask_8u = (raw_mask * 255).astype(np.uint8)
-    kernel = np.ones((8,8), np.uint8)
+    kernel = np.ones((kernel_size, kernel_size), np.uint8)
+    
+    # 1. Clean & Smooth
     closed = cv2.morphologyEx(mask_8u, cv2.MORPH_CLOSE, kernel, iterations=2)
     blurred = cv2.GaussianBlur(closed, (3,3), 0)
     _, final_mask = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
 
     # 2. Vectorization
     contours, _ = cv2.findContours(final_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
-        return None, 0, 0
+    if not contours: return None, 0, 0
     
     main_contour = max(contours, key=cv2.contourArea)
-    perimeter = cv2.arcLength(main_contour, True)
-    epsilon = 0.02 * perimeter
-    simplified_poly = cv2.approxPolyDP(main_contour, epsilon, True)
+    simplified_poly = cv2.approxPolyDP(main_contour, epsilon * cv2.arcLength(main_contour, True), True)
 
-    # 3. Azimuth Calculation
+    # 3. Azimuth
     label_img = label(final_mask)
     props = regionprops(label_img)
-    if not props:
-        return simplified_poly, len(simplified_poly), 0.0
-    
-    main_roof = max(props, key=lambda x: x.area)
-    azimuth = (math.degrees(main_roof.orientation) + 90) % 180
+    azimuth = (math.degrees(max(props, key=lambda x: x.area).orientation) + 90) % 180 if props else 0.0
 
     return simplified_poly, azimuth, final_mask
 
-def get_zoom_crop(image, mask, padding=40):
+def get_zoom_crop(image, mask, padding=CROP_PADDING, min_size=MIN_CROP_SIZE):
     """
-    Crops the image and mask to focus on the detected roof.
-    Returns the cropped image, cropped mask, and the (x, y) offsets.
+    Crops the image to the roof with a safety floor for zoom levels.
     """
-
-   # Find coordinates of all mask pixels
     coords = cv2.findNonZero(mask.astype(np.uint8))
+    if coords is None:
+        return image, mask, (0, 0)
+
     x, y, w, h = cv2.boundingRect(coords)
 
-    # Add padding so the roof isn't touching the edge of the screen
-    start_x = max(0, x - padding)
-    start_y = max(0, y - padding)
-    end_x = min(image.shape[1], x + w + padding)
-    end_y = min(image.shape[0], y + h + padding)
+    # Calculate target boundaries
+    start_x, end_x = x - padding, x + w + padding
+    start_y, end_y = y - padding, y + h + padding
 
-    # Crop both the satellite image and the mask
-    cropped_img = image[start_y:end_y, start_x:end_x]
-    cropped_mask = mask[start_y:end_y, start_x:end_x]
+    # Enforce Max Zoom Limit (Safety Floor)
+    # If the window is smaller than min_size, expand it symmetrically
+    curr_w, curr_h = end_x - start_x, end_y - start_y
     
-    return cropped_img, cropped_mask, (start_x, start_y)
+    if curr_w < min_size:
+        pad_w = (min_size - curr_w) // 2
+        start_x -= pad_w
+        end_x += pad_w
+        
+    if curr_h < min_size:
+        pad_h = (min_size - curr_h) // 2
+        start_y -= pad_h
+        end_y += pad_h
+
+    # Prevent out-of-bounds
+    start_x = max(0, start_x)
+    start_y = max(0, start_y)
+    end_x = min(image.shape[1], end_x)
+    end_y = min(image.shape[0], end_y)
+
+    return image[start_y:end_y, start_x:end_x], mask[start_y:end_y, start_x:end_x], (start_x, start_y)
 
 def filter_non_roof_objects(mask_8u):
     contours, _ = cv2.findContours(mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
