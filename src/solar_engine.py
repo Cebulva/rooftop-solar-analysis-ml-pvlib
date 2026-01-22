@@ -78,10 +78,33 @@ def calculate_solar_potential(lat, lon, tilt, azimuth):
     
     return float(total_irrad['poa_global'].iloc[0])
 
-def get_sunny_polygon_mask(roof_only, threshold_val=180):
+def get_sunny_polygon_mask(roof_only, mask, threshold_offset=20):
     """
-    Creates a binary mask of the brightest parts of the roof (sun vs shadow).
+    Finds the sunny area by identifying the dominant brightness peak 
+    within the specific roof geometry.
     """
+    # 1. Convert to grayscale
     gray = cv2.cvtColor(roof_only, cv2.COLOR_BGR2GRAY)
-    _, sun_mask = cv2.threshold(gray, threshold_val, 255, cv2.THRESH_BINARY)
-    return sun_mask
+    
+    # 2. Ensure mask is uint8 for OpenCV compatibility
+    if mask.dtype != np.uint8:
+        mask = mask.astype(np.uint8)
+        
+    # 3. Apply a Gaussian Blur to reduce pixel noise (e.g. tile textures)
+    # This helps in identifying 'areas' rather than individual pixels
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    
+    # 4. Find the 'Peak' brightness inside the ROOF MASK only
+    # This ignores bright cars or roads outside the roof
+    hist = cv2.calcHist([blurred], [0], mask, [256], [0, 256])
+    brightest_significant_val = np.argmax(hist)
+    
+    # 5. Dynamic Thresholding
+    # We define 'Sunny' as anything near that peak brightness
+    _, sun_mask = cv2.threshold(blurred, brightest_significant_val - threshold_offset, 255, cv2.THRESH_BINARY)
+    
+    # 6. CRITICAL: Bitwise AND with the original mask
+    # This ensures that even if the threshold is low, we only show results on the ROOF
+    final_sun_mask = cv2.bitwise_and(sun_mask, mask)
+    
+    return final_sun_mask

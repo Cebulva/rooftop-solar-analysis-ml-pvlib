@@ -2,9 +2,12 @@ import streamlit as st
 import numpy as np
 import cv2
 import math
+import pandas as pd
 from shapely.geometry import Polygon
-from shapely import affinity
+from shapely import affinity # Required for grid rotation
 import ui_components as ui
+
+# Updated Imports
 from src.solar_engine import (
     get_masked_roof_array, 
     analyze_roof_texture, 
@@ -13,7 +16,7 @@ from src.solar_engine import (
     calculate_solar_potential,
     calculate_global_gsd
 )
-from src.geometry_utils import mask_to_polygon, calculate_azimuth
+from src.geometry_utils import calculate_azimuth, mask_to_polygon
 
 def update_azimuth():
     """Callback to sync the azimuth slider state."""
@@ -25,35 +28,35 @@ def update_threshold():
 
 def generate_panel_grid(sunny_mask, gsd, azimuth, panel_w=1.75, panel_h=1.05):
     """
-    Creates a geometrized vector grid of panels rotated to match the roof azimuth.
+    Creates a geometrized vector grid of panels rotated to match the roof orientation.
     """
     sunny_pts = mask_to_polygon(sunny_mask)
     if not sunny_pts:
         return []
     
-    # 1. Create the base polygon and buffer inward for safety
+    # 1. Create the base polygon and buffer inward for a safety margin (e.g., 1px)
     sunny_poly = Polygon(sunny_pts).buffer(-1)
     
-    # 2. Rotate the roof polygon so its edges are axis-aligned (North-Up)
-    # We rotate by -azimuth to "un-rotate" it for grid generation
+    # 2. "Un-rotate" the roof to North-Up (0°) to simplify grid generation
     center = sunny_poly.centroid
     aligned_poly = affinity.rotate(sunny_poly, -azimuth, origin=center)
     
-    # 3. Dimensions in pixels
+    # 3. Convert physical dimensions (m) to pixels (px)
     pw_px = panel_w / gsd
     ph_px = panel_h / gsd
     
-    # 4. Generate grid on the aligned polygon
+    # 4. Generate grid on the aligned coordinate space
     minx, miny, maxx, maxy = aligned_poly.bounds
     aligned_panels = []
     
     for x in np.arange(minx, maxx, pw_px):
         for y in np.arange(miny, maxy, ph_px):
             p = Polygon([(x, y), (x+pw_px, y), (x+pw_px, y+ph_px), (x, y+ph_px)])
+            # Only keep panels that fit entirely within the sunny area
             if aligned_poly.contains(p):
                 aligned_panels.append(p)
     
-    # 5. Rotate the panels back to the original roof orientation
+    # 5. Rotate the panels back to the actual roof orientation
     final_panels = [affinity.rotate(p, azimuth, origin=center) for p in aligned_panels]
     
     return final_panels
@@ -82,23 +85,25 @@ def show():
 
     # 3. INITIAL AUTOMATED DETECTION
     if "auto_roof_type" not in st.session_state.data:
-        roof_type, variance = analyze_roof_texture(roof_only, mask)
-        
-        # --- PLACE THE LINE HERE ---
-        # Passing 'roof_only' allows the brightness heuristic to work
+        detected_type, _ = analyze_roof_texture(roof_only, mask)
         auto_azimuth = calculate_azimuth(poly_pts, img=roof_only)
-        
-        # Initialize the shadow threshold
+
+        # Find the peak color of the roof to set a smart initial threshold
         gray_roof = cv2.cvtColor(roof_only, cv2.COLOR_BGR2GRAY)
         roof_pixels = gray_roof[mask > 0]
-        mean_brightness = np.mean(roof_pixels) if len(roof_pixels) > 0 else 128
-        initial_threshold = min(255, int(mean_brightness + ui.SHADOW_BIAS))
-        
-        # Save to session state
+
+        if len(roof_pixels) > 0:
+            counts, _ = np.histogram(roof_pixels, bins=256, range=(0, 256))
+            peak_val = np.argmax(counts)
+            # We set the initial offset to be about 15% below the peak
+            initial_threshold = 20 
+        else:
+            initial_threshold = 25
+
         st.session_state.data.update({
-            "auto_roof_type": roof_type,
+            "auto_roof_type": detected_type,
             "user_azimuth": float(auto_azimuth),
-            "user_tilt": 38.0 if roof_type == "Pitched" else 0.0,
+            "user_tilt": 38.0 if detected_type == "Pitched" else 0.0,
             "sun_threshold": initial_threshold 
         })
 
@@ -112,7 +117,7 @@ def show():
                   key="sun_slider_widget", on_change=update_threshold)
         
         current_threshold = st.session_state.data["sun_threshold"]
-        sun_mask = get_sunny_polygon_mask(roof_only, current_threshold)
+        sun_mask = get_sunny_polygon_mask(roof_only, mask, threshold_offset=current_threshold)
         current_gsd = calculate_global_gsd(lat, zoom_level)
         current_azimuth = st.session_state.data["user_azimuth"]
         
@@ -121,31 +126,40 @@ def show():
         
         # Rendering
         viz_img = roof_only.copy()
+        # Draw Sunny Area Overlay
         sunny_overlay = viz_img.copy()
-        sunny_overlay[sun_mask > 0] = [0, 255, 255]
+        sunny_overlay[sun_mask > 0] = [0, 255, 255] # Yellow tint for sun
         viz_img = cv2.addWeighted(viz_img, 0.7, sunny_overlay, 0.3, 0)
         
+        # Draw Panels
         for p in fitted_panels:
             pts = np.array(p.exterior.coords, np.int32)
-            cv2.polylines(viz_img, [pts], True, (255, 0, 0), 1)
+            cv2.polylines(viz_img, [pts], True, (255, 0, 0), 1) # Blue border
             overlay = viz_img.copy()
-            cv2.fillPoly(overlay, [pts], (255, 200, 0))
+            cv2.fillPoly(overlay, [pts], (255, 200, 0)) # Golden panels
             viz_img = cv2.addWeighted(overlay, 0.4, viz_img, 0.6, 0)
 
+        # Draw Orientation Arrow
         final_preview = draw_azimuth_arrow(viz_img, current_azimuth)
-        st.image(final_preview, caption="Panels Aligned to Roof Orientation", width=ui.DISPLAY_WIDTH)
+        st.image(final_preview, caption="Dynamic Panel Alignment & Shadow Masking", width=ui.DISPLAY_WIDTH)
         
-        # USER CONTROLS
+        # USER CONTROLS (Manual Overrides)
         with st.container(border=True):
             c1, c2, c3 = st.columns(3)
+            
             selected_type = c1.selectbox("Roof Form", ["Flat", "Pitched"], 
                                          index=0 if st.session_state.data["auto_roof_type"] == "Flat" else 1)
             
+            # Sync selection changes
             if selected_type != st.session_state.data["auto_roof_type"]:
                 st.session_state.data["auto_roof_type"] = selected_type
+                st.session_state.data["user_tilt"] = 0.0 if selected_type == "Flat" else 38.0
                 st.rerun()
 
-            tilt = c2.number_input("Tilt Angle (°)", 0.0, 90.0, st.session_state.data["user_tilt"])
+            # DISABLE Tilt if Flat
+            is_flat = st.session_state.data["auto_roof_type"] == "Flat"
+            tilt = c2.number_input("Tilt Angle (°)", 0.0, 90.0, float(st.session_state.data["user_tilt"]), 
+                                   disabled=is_flat)
             st.session_state.data["user_tilt"] = tilt
             
             c3.slider("Orientation (°)", 0, 359, int(st.session_state.data["user_azimuth"]),
@@ -173,4 +187,9 @@ def show():
         st.markdown("### 📊 Global Metrics")
         st.metric("Panels Fitted", f"{len(fitted_panels)}")
         st.metric("Potential Capacity", f"{(len(fitted_panels) * 400) / 1000:.2f} kWp")
-        st.info(f"Panels are now dynamically aligned to the {current_azimuth:.1f}° azimuth.")
+        
+        roof_pixel_count = np.sum(mask > 0)
+        footprint_m2 = roof_pixel_count * (current_gsd ** 2)
+        st.metric("Footprint Area", f"{footprint_m2:.1f} m²")
+        
+        st.info(f"Panels are optimized for a {current_azimuth:.1f}° azimuth And {tilt}° tilt.")
