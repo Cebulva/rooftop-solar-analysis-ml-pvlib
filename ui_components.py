@@ -6,6 +6,7 @@ AI_ZOOM = 19
 GSD_19 = 0.298 
 DISPLAY_WIDTH = 700
 BUTTON_SIZE_VERIFY = 350
+SHADOW_BIAS = 40
 
 def render_sidebar():
     with st.sidebar:
