@@ -17,6 +17,7 @@ AI_ZOOM = 19
 GSD_19 = 0.298
 DISPLAY_WIDTH = 700
 BUTTON_SIZE_VERIFY = 350
+SHADOW_BIAS = 40
 
 # Default location: Cuvrystraße 1, 10997 Berlin, Germany
 DEFAULT_LAT = 52.4985
