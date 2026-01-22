@@ -31,24 +31,6 @@ def analyze_roof_texture(roof_cutout, mask, threshold=15.0):
     roof_type = "Pitched" if std_dev > threshold else "Flat"
     return roof_type, std_dev
 
-def calculate_azimuth(img, polygon_pts):
-    pts = np.array(polygon_pts, dtype=np.int32)
-    rect = cv2.minAreaRect(pts)
-    (x, y), (w, h), angle = rect
-    
-    # Favor short axis for slope
-    azimuth = angle if w > h else angle + 90
-    azimuth = azimuth % 360
-
-    # Brightness heuristic (point away from shadow)
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    h_i, w_i = gray.shape
-    if np.mean(gray[h_i//2:, :]) > np.mean(gray[0:h_i//2, :]):
-        if azimuth < 90 or azimuth > 270: azimuth = (azimuth + 180) % 360
-    else:
-        if 90 < azimuth < 270: azimuth = (azimuth + 180) % 360
-    return float(azimuth)
-
 def draw_azimuth_arrow(img, azimuth_deg):
     h, w = img.shape[:2]
     center = (w // 2, h // 2)
