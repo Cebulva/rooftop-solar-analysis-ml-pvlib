@@ -136,7 +136,7 @@ def get_osm_mask(
         r = requests.get(
             "https://overpass.kumi.systems/api/interpreter",
             params={"data": query},
-            timeout=30,
+            timeout=5,
         )
         r.raise_for_status()
 
