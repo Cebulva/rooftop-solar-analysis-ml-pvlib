@@ -48,11 +48,23 @@ def render_sidebar():
                 try:
                     geolocator = Nominatim(user_agent="solarsight_ai_v1")
                     with st.spinner("Locating..."):
-                        location = geolocator.geocode(address_input, timeout=10)
+                        location = geolocator.geocode(address_input, addressdetails=True, timeout=10)
                         if location:
                             st.session_state["map_center"] = [location.latitude, location.longitude]
-                            st.session_state["selected_pos"] = None
-                            st.success(f"Found: {location.address[:50]}...")
+
+                            # Check if address has house number (complete address)
+                            # If yes, automatically place the pin
+                            address_details = location.raw.get('address', {})
+                            has_house_number = 'house_number' in address_details
+
+                            if has_house_number:
+                                # Complete address - place pin automatically
+                                st.session_state["selected_pos"] = (location.latitude, location.longitude)
+                                st.success(f"📍 Pinned: {location.address[:60]}...")
+                            else:
+                                # Incomplete address - just move map, user can click manually
+                                st.session_state["selected_pos"] = None
+                                st.info(f"Found area: {location.address[:60]}... Click on map to select exact building.")
                             st.rerun()
                         else:
                             st.error("Address not found.")

@@ -43,6 +43,9 @@ def show():
         # Render map
         output = st_folium(m, width=1000, height=600, key="main_map")
 
+        # Map navigation tip
+        st.caption("💡 **Tip:** Zoom out to see wider satellite view, zoom in for detailed street map.")
+
         # Handle map clicks
         if output and output.get("last_clicked"):
             new_lat = output["last_clicked"]["lat"]
