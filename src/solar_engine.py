@@ -22,13 +22,27 @@ def get_masked_roof_array(zoom_img, polygon_pts):
     roof_cutout = cv2.bitwise_and(zoom_img, zoom_img, mask=mask)
     return mask, roof_cutout
 
-def analyze_roof_texture(roof_cutout, mask, threshold=15.0):
+def analyze_roof_texture(roof_cutout, mask, sun_mask=None, threshold=15.0):
     gray_roof = cv2.cvtColor(roof_cutout, cv2.COLOR_BGR2GRAY)
-    relevant_intensities = gray_roof[mask > 0]
+    
+    # Use sun_mask if provided, otherwise fallback to the full roof mask
+    analysis_mask = sun_mask if sun_mask is not None else mask
+    
+    # Cast to uint8 to avoid OpenCV errors
+    if analysis_mask.dtype != np.uint8:
+        analysis_mask = analysis_mask.astype(np.uint8)
+        
+    relevant_intensities = gray_roof[analysis_mask > 0]
+    
     if len(relevant_intensities) == 0:
         return "Flat", 0.0
+        
     std_dev = np.std(relevant_intensities)
+    
+    # Low variance = Flat (bitumen/concrete/gravel)
+    # High variance = Pitched (tiles/shingles)
     roof_type = "Pitched" if std_dev > threshold else "Flat"
+    
     return roof_type, std_dev
 
 def draw_azimuth_arrow(img, azimuth_deg):
