@@ -132,9 +132,7 @@ def render_adjust(base_resized, scaling_factor, display_h, res):
     with col_dash:
         st.markdown("### 📊 Metrics")
         if extracted_pts_raw:
-            lat = st.session_state.data["confirmed_lat"]
-            gsd = calculate_global_gsd(lat, zoom=19)
-            area = cv2.contourArea(np.array(extracted_pts_raw).astype(np.float32)) * (gsd**2)
+            area = cv2.contourArea(np.array(extracted_pts_raw).astype(np.float32)) * (ui.GSD_19**2)
             st.metric("Refined Area", f"{area:.1f} m²")
             st.divider()
             if st.button("✨ Draw from Scratch", use_container_width=True):
@@ -164,9 +162,7 @@ def render_draw_new(base_resized, scaling_factor, display_h):
             path = obj.get("path", [])
             extracted_pts = [[p[1]/scaling_factor, p[2]/scaling_factor] for p in path if len(p) > 2]
             if extracted_pts and len(extracted_pts) >= 3:
-                lat = st.session_state.data["confirmed_lat"]
-                gsd = calculate_global_gsd(lat, zoom=19)
-                area = cv2.contourArea(np.array(extracted_pts).astype(np.float32)) * (gsd**2)
+                area = cv2.contourArea(np.array(extracted_pts).astype(np.float32)) * (ui.GSD_19**2)
                 st.metric("Roof Area", f"{area:.1f} m²")
                 if st.button("💾 Save Shape", type="primary", use_container_width=True):
                     st.session_state.data["final_poly"] = extracted_pts

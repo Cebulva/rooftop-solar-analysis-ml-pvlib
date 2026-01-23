@@ -61,19 +61,42 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
 
 def show():
     st.header("Step 3b: Solar And Irradiance Analysis")
-    
+
     if "final_poly" not in st.session_state.data:
         st.warning("Please complete the roof refinement in Step 2 first.")
         return
 
+    # Back button
+    if st.button("⬅️ Back to Questionnaire", key="back_to_step3a"):
+        st.session_state.step = 3
+        st.rerun()
+
     res = st.session_state.data["res"]
     lat = st.session_state.data["confirmed_lat"]
     lon = st.session_state.data["confirmed_lon"]
-    
+
     # 1. INITIALIZATION & DATA RETRIEVAL
     # Get the recommendation from the questionnaire (Stage 3a)
     recommended_limit = st.session_state.data.get("recommended_count", 20)
-    
+    consumption_inputs = st.session_state.data.get("consumption_inputs", {})
+    annual_kwh = consumption_inputs.get("annual_kwh", 3500)
+    breakdown = consumption_inputs.get("breakdown", {})
+
+    # Show consumption summary and recommendation from Stage 3a
+    with st.container(border=True):
+        st.subheader("📊 Your Estimated Annual Consumption")
+        col_cons1, col_cons2 = st.columns([2, 1])
+
+        with col_cons1:
+            for item, kwh in breakdown.items():
+                if item != 'Total':
+                    st.write(f"- {item}: {kwh:,} kWh")
+
+        with col_cons2:
+            st.metric("Total", f"{annual_kwh:,} kWh/year")
+            recommended_kwp = (recommended_limit * 440) / 1000
+            st.metric("Recommended", f"{recommended_limit} panels ({recommended_kwp:.1f} kWp)")
+
     # Initialize the target count in session state if not present
     if "target_panel_count" not in st.session_state.data:
         st.session_state.data["target_panel_count"] = recommended_limit
