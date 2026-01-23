@@ -62,133 +62,119 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
 def show():
     st.header("Step 3b: Solar And Irradiance Analysis")
     
-    # 1. DATA VALIDATION
     if "final_poly" not in st.session_state.data:
         st.warning("Please complete the roof refinement in Step 2 first.")
         return
 
     res = st.session_state.data["res"]
-    zoom_img = res["zoom_img"]
-    poly_pts = st.session_state.data["final_poly"]
-    lat = st.session_state.data.get("confirmed_lat", 53.55)
-    lon = st.session_state.data.get("confirmed_lon", 9.99)
-    zoom_level = 19 
+    lat = st.session_state.data["confirmed_lat"]
+    lon = st.session_state.data["confirmed_lon"]
+    
+    # 1. INITIALIZATION & DATA RETRIEVAL
+    # Get the recommendation from the questionnaire (Stage 3a)
+    recommended_limit = st.session_state.data.get("recommended_count", 20)
+    
+    # Initialize the target count in session state if not present
+    if "target_panel_count" not in st.session_state.data:
+        st.session_state.data["target_panel_count"] = recommended_limit
 
-    # 2. IMAGE PREPARATION
-    mask, roof_only = get_masked_roof_array(zoom_img, poly_pts)
-
-    # 3. CRITICAL: CALCULATE INITIAL SUN MASK 
-    # This prevents the UnboundLocalError by ensuring sun_mask exists for detection
+    # 2. Geometry and Masking
+    mask, roof_only = get_masked_roof_array(res["zoom_img"], st.session_state.data["final_poly"])
+    gsd = calculate_global_gsd(lat, zoom=19) 
+    pixel_area_m2 = gsd ** 2
+    
+    total_area_m2 = np.sum(mask > 0) * pixel_area_m2
+    
     current_threshold = st.session_state.data.get("sun_threshold", 25)
     sun_mask = get_sunny_polygon_mask(roof_only, mask, threshold_offset=current_threshold)
+    usable_area_m2 = np.sum(sun_mask > 0) * pixel_area_m2
 
-    # 4. INITIAL AUTOMATED DETECTION
+    # 3. Analysis
     if "auto_roof_type" not in st.session_state.data:
-        # Use sun_mask here to ignore shadow-lines when detecting Flat vs Pitched
         detected_type, _ = analyze_roof_texture(roof_only, mask, sun_mask=sun_mask)
-        auto_azimuth = calculate_azimuth(poly_pts, img=roof_only)
-        
+        auto_azimuth = calculate_azimuth(st.session_state.data["final_poly"], img=roof_only)
         st.session_state.data.update({
             "auto_roof_type": detected_type,
             "user_azimuth": float(auto_azimuth),
-            "user_tilt": 38.0 if detected_type == "Pitched" else 0.0,
-            "sun_threshold": 25 
+            "user_tilt": 38.0 if detected_type == "Pitched" else 0.0
         })
 
-    # 5. MAIN LAYOUT
-    col_L, col_center, col_R = st.columns([1, 4, 1.5])
+    current_azimuth = st.session_state.data["user_azimuth"]
+    user_tilt = st.session_state.data["user_tilt"]
 
-    with col_center:
-        st.markdown("### 🛠️ Geometry And Shadow Mapping")
-        
-        # Shadow Control
-        st.slider("Shadow Sensitivity", 0, 100, int(st.session_state.data["sun_threshold"]),
-                  key="sun_slider_widget", on_change=update_threshold)
-        
-        current_gsd = calculate_global_gsd(lat, zoom_level)
-        current_azimuth = st.session_state.data["user_azimuth"]
-        tilt = st.session_state.data["user_tilt"]
-        
-        # --- GENERATE PHYSICAL GRID (Using Panel Size & Tilt) ---
-        full_grid = generate_panel_grid(
-            sun_mask, 
-            current_gsd, 
-            current_azimuth, 
-            tilt=tilt,
-            panel_w=1.76, 
-            panel_h=1.13
-        )
-        max_possible = len(full_grid)
+    # 4. Generate Panel Grid (Limited by Target Count)
+    all_possible_panels = generate_panel_grid(sun_mask, gsd, current_azimuth, user_tilt)
+    
+    # Apply the limit chosen by the user or the questionnaire
+    limit = st.session_state.data["target_panel_count"]
+    panels = all_possible_panels[:limit] 
+    selected_count = len(panels)
 
-        # --- PANEL SELECTION SLIDER ---
-        st.divider()
-        st.markdown("### 🔢 System Sizing And Selection")
+    # 5. UI Layout
+    col_main, col_R = st.columns([4, 1.5])
+    
+    with col_main:
+        display_img = roof_only.copy()
         
-        recommended = st.session_state.data.get("recommended_count", 1)
-        default_val = min(recommended, max_possible) if max_possible > 0 else 0
+        # Yellow Mask Overlay
+        mask_overlay = np.zeros_like(display_img)
+        mask_overlay[sun_mask > 0] = (0, 255, 255)
+        display_img = cv2.addWeighted(display_img, 1.0, mask_overlay, 0.3, 0)
         
-        selected_count = st.slider(
-            "Number of Panels", 
-            min_value=1 if max_possible > 0 else 0, 
-            max_value=max_possible, 
-            value=default_val,
-            help=f"Recommendation: {recommended}. Max: {max_possible}."
-        )
+        display_img = draw_azimuth_arrow(display_img, current_azimuth)
+        
+        for p in panels:
+            p_int = np.array(p.exterior.coords, dtype=np.int32)
+            cv2.polylines(display_img, [p_int], True, (0, 255, 0), 1)
 
-        display_panels = full_grid[:selected_count]
-
-        # RENDER VISUALS
-        viz_img = roof_only.copy()
-        sunny_overlay = viz_img.copy()
-        sunny_overlay[sun_mask > 0] = [0, 255, 255]
-        viz_img = cv2.addWeighted(viz_img, 0.7, sunny_overlay, 0.3, 0)
+        st.image(display_img, use_container_width=True)
         
-        for p in display_panels:
-            pts = np.array(p.exterior.coords, np.int32)
-            cv2.polylines(viz_img, [pts], True, (255, 0, 0), 1)
-            overlay = viz_img.copy()
-            cv2.fillPoly(overlay, [pts], (255, 200, 0))
-            viz_img = cv2.addWeighted(overlay, 0.4, viz_img, 0.6, 0)
+        with st.expander("🛠️ Analysis And Adjustments", expanded=True):
+            # Restored Panel Limit Slider
+            # Max value is the physical capacity of the roof
+            max_capacity = len(all_possible_panels)
+            st.slider("Number of Panels to Install", 1, max(1, max_capacity), 
+                      int(st.session_state.data["target_panel_count"]), 
+                      key="panel_slider_widget", 
+                      help=f"Questionnaire recommended: {recommended_limit}",
+                      on_change=lambda: st.session_state.data.update({"target_panel_count": st.session_state.panel_slider_widget}))
 
-        final_preview = draw_azimuth_arrow(viz_img, current_azimuth)
-        st.image(final_preview, caption="Panel Alignment And Perspective Correction", width=ui.DISPLAY_WIDTH)
-        
-        # MANUAL OVERRIDES
-        with st.container(border=True):
-            c1, c2, c3 = st.columns(3)
-            selected_type = c1.selectbox("Roof Form", ["Flat", "Pitched"], 
-                                         index=0 if st.session_state.data["auto_roof_type"] == "Flat" else 1)
+            c1, c2 = st.columns(2)
+            selected_type = c1.selectbox("Roof Form", ["Pitched", "Flat"], 
+                                       index=0 if st.session_state.data["auto_roof_type"] == "Pitched" else 1)
             
+            # Re-run if type changes to update tilt
             if selected_type != st.session_state.data["auto_roof_type"]:
                 st.session_state.data["auto_roof_type"] = selected_type
                 st.session_state.data["user_tilt"] = 0.0 if selected_type == "Flat" else 38.0
                 st.rerun()
 
-            is_flat = st.session_state.data["auto_roof_type"] == "Flat"
-            user_tilt = c2.number_input("Tilt Angle (°)", 0.0, 90.0, float(st.session_state.data["user_tilt"]), disabled=is_flat)
-            st.session_state.data["user_tilt"] = user_tilt
-            
-            c3.slider("Orientation (°)", 0, 359, int(st.session_state.data["user_azimuth"]),
+            st.slider("Solar Orientation (Azimuth °)", 0, 359, int(current_azimuth), 
                       key="az_slider_widget", on_change=update_azimuth)
+            
+            st.slider("Shadow Tolerance (Threshold)", 0, 100, int(current_threshold), 
+                      key="sun_slider_widget", on_change=update_threshold)
 
-        st.divider()
+    
+
+    with col_R:
+        st.markdown("### 📊 Global Metrics")
+        st.metric("Total Roof Area", f"{total_area_m2:.1f} m²")
+        st.metric("Usable Space", f"{usable_area_m2:.1f} m²")
+        st.metric("Selected Panels", f"{selected_count}", help=f"Targeting {st.session_state.data['target_panel_count']}")
+        st.metric("System Size", f"{((selected_count * 440) / 1000):.2f} kWp")
         
         if st.button("Run Simulation And Generate Report ☀️", type="primary", use_container_width=True):
             irrad_val = calculate_solar_potential(lat, lon, user_tilt, current_azimuth)
             st.session_state.data["solar_results"] = {
-                "irradiance_w_m2": irrad_val,
+                "total_roof_area_m2": total_area_m2,
+                "usable_roof_area_m2": usable_area_m2,
                 "panel_count": selected_count,
-                "total_kwp": (selected_count * 440) / 1000 # Modern 440W Glass-Glass
+                "system_kwp": (selected_count * 440) / 1000,
+                "azimuth": current_azimuth,
+                "tilt_angle": user_tilt,
+                "roof_form": st.session_state.data["auto_roof_type"],
+                "irradiance_potential": irrad_val
             }
             st.session_state.step = 5
             st.rerun()
-
-    with col_R:
-        st.markdown("### 📊 Global Metrics")
-        st.metric("Selected Panels", f"{selected_count}")
-        st.metric("System Size", f"{(selected_count * 440) / 1000:.2f} kWp")
-        
-        if recommended > max_possible:
-            st.warning(f"Note: Roof only fits {max_possible} panels. Your requirement was {recommended}.")
-        
-        st.info(f"System optimized for {current_azimuth:.1f}° azimuth And {user_tilt}° tilt.")
