@@ -50,4 +50,5 @@ dependencies:
     - streamlit-folium==0.25.3
     - streamlit-drawable-canvas==0.9.3
     - segmentation-models-pytorch   
-    - pysolar>=0.10                 
+    - pysolar>=0.10  
+    - groq               
