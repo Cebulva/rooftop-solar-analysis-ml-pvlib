@@ -30,18 +30,14 @@ dependencies:
 # === Machine Learning ===
   - pytorch                
   - torchvision
-  - torchaudio
   - tqdm
   - pycocotools
   - rasterio
+  - requests
 
 # === Web App ===
   - streamlit>=1.52
   - Pillow>=12.0
-
-# === Google Services ===
-  - googlemaps             
-  - requests
 
 # === Pip Packages ===
   - pip:
@@ -51,4 +47,5 @@ dependencies:
     - streamlit-drawable-canvas==0.9.3
     - segmentation-models-pytorch   
     - pysolar>=0.10  
-    - groq               
+    - groq
+    - python-dotenv==1.2.1
