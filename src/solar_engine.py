@@ -512,15 +512,19 @@ def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
     if best_config is None or best_score < 0:
         print(f"\n   🔍 STRATEGY 2: No single-row possible, using SERPENTINE...")
 
-        # Apply contiguity check to rows for serpentine placement
-        # We need to ensure we select from contiguous sequences within each row
+        # Use ALL contiguous sequences as separate rows (not just longest from each row)
+        # This maximizes capacity while maintaining no-gaps guarantee
         contiguous_rows = []
         for row in all_rows:
             sequences = find_contiguous_sequences(row, gsd, panel_w=panel_w, panel_spacing=panel_spacing)
-            # Use the longest contiguous sequence from each row
-            if sequences:
-                longest_seq = max(sequences, key=len)
-                contiguous_rows.append(longest_seq)
+            # Add ALL sequences as separate rows
+            for sequence in sequences:
+                if sequence:  # Skip empty sequences
+                    contiguous_rows.append(sequence)
+
+        print(f"   Total contiguous sequences available: {len(contiguous_rows)}")
+        total_capacity = sum(len(seq) for seq in contiguous_rows)
+        print(f"   Total panel capacity: {total_capacity} panels")
 
         selected, selected_rows, score, warning = select_panels_from_grid(
             all_panels, contiguous_rows, target_count

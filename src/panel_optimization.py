@@ -93,11 +93,11 @@ def score_contiguity(panels, rows_structure, target_count):
 
 def select_panels_from_grid(all_panels, rows_structure, target_count):
     """
-    Selects N panels from the grid, distributing them evenly across rows.
+    Selects N panels from the grid using optimal serpentine distribution.
 
     Distribution logic:
-    - Calculates minimum rows needed for target count
-    - Distributes panels evenly (e.g., 8 panels → 4+4, not 6+2)
+    - Tries to minimize number of rows (prefer 2x4 over 3+3+2)
+    - Distributes panels evenly when possible (e.g., 8 panels → 4+4)
     - Always selects from LEFT of each row (no gaps)
     - Scores contiguity after selection
 
@@ -114,44 +114,88 @@ def select_panels_from_grid(all_panels, rows_structure, target_count):
             - warning_message: str or None if panels are contiguous
     """
     if not rows_structure or target_count <= 0:
-        return [], []
+        return [], [], 0, "No panels available"
 
     total_available = len(all_panels)
     actual_count = min(target_count, total_available)
 
-    # Determine how many rows we need and distribute evenly
-    # ALWAYS fill from LEFT physically to avoid gaps
-
-    # Calculate row capacities
+    # Get row capacities (how many panels each row can hold)
     row_capacities = [len(row) for row in rows_structure]
 
     if not row_capacities:
         return [], [], 0, "No panels available"
 
-    # Determine minimum rows needed
-    max_per_row = max(row_capacities)
-    rows_needed = min(len(rows_structure), (actual_count + max_per_row - 1) // max_per_row)
+    # Sort capacities (largest first) for checking
+    sorted_capacities = sorted(row_capacities, reverse=True)
 
-    # Distribute panels evenly across the needed rows
-    panels_per_row = actual_count // rows_needed
-    remainder = actual_count % rows_needed
+    # Try to fit panels in fewest rows possible
+    # Priority: 1 row > 2 rows > 3 rows > ...
+    best_distribution = None
 
-    selected_rows = []
+    for num_rows in range(1, len(rows_structure) + 1):
+        # Calculate how many panels per row we'd need
+        # For even distribution, all rows get same count
+        if actual_count % num_rows == 0:
+            panels_per_row = actual_count // num_rows
 
-    for row_idx in range(rows_needed):
-        row = rows_structure[row_idx]
+            # Check if we have enough rows with this capacity
+            rows_with_capacity = sum(1 for cap in sorted_capacities if cap >= panels_per_row)
 
-        # Calculate how many panels this row gets
-        panels_for_this_row = panels_per_row
-        if row_idx < remainder:
-            panels_for_this_row += 1
+            if rows_with_capacity >= num_rows:
+                # Perfect even distribution found!
+                best_distribution = [panels_per_row] * num_rows
+                break
 
-        # Don't exceed row capacity
-        panels_for_this_row = min(panels_for_this_row, len(row))
+        # For uneven distribution
+        panels_per_row_base = actual_count // num_rows
+        remainder = actual_count % num_rows
 
-        # Always take from LEFT (start of list) to avoid visual gaps
-        selected_row = row[:panels_for_this_row]
-        selected_rows.append(selected_row)
+        # First rows get more panels (e.g., 7 panels in 3 rows → 3,2,2)
+        distribution = []
+        for i in range(num_rows):
+            if i < remainder:
+                distribution.append(panels_per_row_base + 1)
+            else:
+                distribution.append(panels_per_row_base)
+
+        # Check if we can support this distribution
+        # We need rows with sufficient capacity for each position
+        distribution_sorted = sorted(distribution, reverse=True)
+        can_fit = True
+        for i, needed in enumerate(distribution_sorted):
+            if i >= len(sorted_capacities) or sorted_capacities[i] < needed:
+                can_fit = False
+                break
+
+        if can_fit:
+            best_distribution = distribution
+            break
+
+    if best_distribution is None:
+        return [], [], 0, f"Cannot fit {actual_count} panels with available rows"
+
+    # Now select panels according to best distribution
+    # We need to match distribution to actual rows (keep physical order for serpentine)
+
+    # Sort rows with their indices to maintain order
+    rows_with_indices = [(i, row) for i, row in enumerate(rows_structure)]
+
+    # Sort by capacity (largest first) to match with distribution
+    rows_with_indices.sort(key=lambda x: len(x[1]), reverse=True)
+
+    # Create selection mapping
+    selected_rows_mapping = []
+    for i, panels_needed in enumerate(best_distribution):
+        if i < len(rows_with_indices):
+            row_idx, row = rows_with_indices[i]
+            selected_row = row[:panels_needed]
+            selected_rows_mapping.append((row_idx, selected_row))
+
+    # Sort back by original row index to maintain physical order for serpentine
+    selected_rows_mapping.sort(key=lambda x: x[0])
+
+    # Extract just the selected rows
+    selected_rows = [row for _, row in selected_rows_mapping]
 
     # Flatten to single list
     selected_flat = []
@@ -161,6 +205,7 @@ def select_panels_from_grid(all_panels, rows_structure, target_count):
     print(f"\n📋 PANEL SELECTION:")
     print(f"   Target: {target_count} panels")
     print(f"   Selected: {len(selected_flat)} panels")
+    print(f"   Distribution: {' + '.join(map(str, [len(r) for r in selected_rows]))}")
     print(f"   Rows used: {len(selected_rows)}")
     for i, row in enumerate(selected_rows):
         print(f"      Row {i+1}: {len(row)} panels (from LEFT side)")
