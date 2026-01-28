@@ -152,23 +152,29 @@ def show():
     usable_area_m2 = np.sum(sun_mask > 0) * pixel_area_m2
 
     # 3. Analysis - IMPROVED ROOF TYPE DETECTION
+    # Always run detection to keep debug info updated with current sun_mask
+    detected_type, confidence, debug_info = analyze_roof_geometry(roof_only, mask, sun_mask)
+
+    # Store current detection results (always updated)
+    st.session_state.data["detection_confidence"] = confidence
+    st.session_state.data["detection_debug"] = debug_info
+    st.session_state.data["detected_roof_type"] = detected_type  # Current detection result
+
+    # Initialize on first run only
     if "auto_roof_type" not in st.session_state.data:
-        # Use enhanced detection with multiple heuristics
-        detected_type, confidence, debug_info = analyze_roof_geometry(roof_only, mask, sun_mask)
         auto_azimuth = calculate_azimuth(st.session_state.data["final_poly"], img=roof_only)
-        
+
         # Set default tilt based on roof type
         default_tilt = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
-        
+
         st.session_state.data.update({
             "auto_roof_type": detected_type,
             "user_azimuth": float(auto_azimuth),
             "user_tilt": default_tilt,
             "panel_orientation": DEFAULT_PANEL_ORIENTATION,  # Initialize orientation
-            "detection_confidence": confidence,
-            "detection_debug": debug_info
+            "roof_type_manually_set": False  # Track if user manually changed roof type
         })
-        
+
         # Display detection reasoning in console/logs
         print(f"\n🏠 ROOF TYPE DETECTION:")
         print(f"   Result: {detected_type} (Confidence: {confidence:.1%})")
@@ -177,6 +183,13 @@ def show():
         print(f"   Brightness Range: {debug_info.get('brightness_range', 0):.0f}")
         print(f"   Texture StdDev: {debug_info.get('std_dev', 0):.1f}")
         print(f"   Default Tilt: {default_tilt}°")
+
+    # Auto-update roof type if user hasn't manually changed it
+    elif not st.session_state.data.get("roof_type_manually_set", False):
+        if st.session_state.data["auto_roof_type"] != detected_type:
+            st.session_state.data["auto_roof_type"] = detected_type
+            # Update tilt to match new roof type
+            st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
     
     # Get current panel orientation
     current_orientation = st.session_state.data.get("panel_orientation", DEFAULT_PANEL_ORIENTATION)
@@ -494,11 +507,27 @@ def show():
                 if SHOW_DEBUG_INFO and "detection_debug" in st.session_state.data:
                     debug = st.session_state.data["detection_debug"]
                     confidence = st.session_state.data.get("detection_confidence", 0)
+                    detected_type = st.session_state.data.get("detected_roof_type", "Unknown")
+                    manually_set = st.session_state.data.get("roof_type_manually_set", False)
 
                     # Show detection info in expander instead of column
                     with st.expander("🔍 Detection Details", expanded=False):
-                        st.metric("Detection Confidence", f"{confidence:.0%}",
-                                 help=debug.get("reason", "Auto-detected roof type"))
+                        col_det1, col_det2 = st.columns(2)
+                        with col_det1:
+                            st.metric("Detected Type", detected_type)
+                        with col_det2:
+                            st.metric("Confidence", f"{confidence:.0%}")
+
+                        # Show if user has overridden detection
+                        if manually_set and selected_type != detected_type:
+                            st.info(f"You selected **{selected_type}** (detection suggests {detected_type})")
+                            if st.button("Reset to Auto-Detection", key="reset_roof_type"):
+                                st.session_state.data["auto_roof_type"] = detected_type
+                                st.session_state.data["roof_type_manually_set"] = False
+                                st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
+                                recalculate_irradiance()
+                                st.rerun()
+
                         st.write(f"**Reasoning:** {debug.get('reason', 'N/A')}")
                         st.write(f"**Coverage Ratio:** {debug.get('coverage_ratio', 0):.1%} "
                                 f"(Flat if ≥ {MIN_FLAT_ROOF_COVERAGE:.0%})")
@@ -510,6 +539,7 @@ def show():
                 # Re-run if type changes to update tilt
                 if selected_type != st.session_state.data["auto_roof_type"]:
                     st.session_state.data["auto_roof_type"] = selected_type
+                    st.session_state.data["roof_type_manually_set"] = True  # User manually changed roof type
                     # Set appropriate default tilt for the roof type
                     st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if selected_type == "Pitched" else DEFAULT_FLAT_TILT
                     recalculate_irradiance()
