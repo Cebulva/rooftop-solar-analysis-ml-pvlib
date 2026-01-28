@@ -342,6 +342,65 @@ def overlay_panel_sprite(base_img, panel_polygon, sprite):
 
     return base_img
 
+def find_contiguous_sequences(row, gsd, panel_w=1.76, panel_spacing=0.05):
+    """
+    Finds contiguous sequences of panels within a row.
+
+    Panels are considered contiguous if their centroid distance is within
+    expected spacing (panel_width + panel_spacing + tolerance).
+
+    Args:
+        row: List of panel polygons sorted by X-coordinate
+        gsd: Ground Sample Distance (meters per pixel)
+        panel_w: Panel width in meters (default 1.76m)
+        panel_spacing: Gap between panels in meters (default 0.05m)
+
+    Returns:
+        List of lists, where each inner list is a contiguous sequence
+    """
+    import math
+
+    if not row:
+        return []
+
+    if len(row) == 1:
+        return [row]
+
+    # Calculate expected spacing between panel centroids
+    # Normal spacing = panel width + gap between panels
+    expected_spacing_m = panel_w + panel_spacing  # ~1.81m
+    expected_spacing_px = expected_spacing_m / gsd
+
+    # Allow 50% tolerance for slight variations (e.g., rotation, placement)
+    max_gap_threshold = expected_spacing_px * 1.5
+
+    print(f"      Gap detection: max distance = {max_gap_threshold:.1f}px (expected: {expected_spacing_px:.1f}px)")
+
+    sequences = []
+    current_sequence = [row[0]]
+
+    for i in range(1, len(row)):
+        prev_centroid = row[i-1].centroid
+        curr_centroid = row[i].centroid
+
+        # Calculate actual distance
+        distance = math.sqrt((curr_centroid.x - prev_centroid.x)**2 +
+                           (curr_centroid.y - prev_centroid.y)**2)
+
+        if distance <= max_gap_threshold:  # Adjacent
+            current_sequence.append(row[i])
+        else:  # Gap detected (chimney, vent, etc.)
+            print(f"         GAP detected: {distance:.1f}px > {max_gap_threshold:.1f}px threshold")
+            sequences.append(current_sequence)
+            current_sequence = [row[i]]
+
+    # Add final sequence
+    if current_sequence:
+        sequences.append(current_sequence)
+
+    return sequences
+
+
 def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
                          panel_w=1.76, panel_h=1.13, edge_margin=0.30,
                          panel_spacing=0.05, orientation="Portrait"):
@@ -375,6 +434,7 @@ def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
 
     # For large arrays, skip optimization (performance)
     if target_count > 10:
+        print(f"\n⚡ LARGE ARRAY MODE (>{10} panels) - Using standard serpentine placement")
         panels_flat, rows_structure = generate_panel_grid(
             sunny_mask, gsd, azimuth, tilt, panel_w, panel_h,
             edge_margin, panel_spacing, orientation
@@ -386,6 +446,7 @@ def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
         selected, selected_rows, score, warning = select_panels_from_grid(
             panels_flat, rows_structure, target_count
         )
+        print(f"\n   ✅ MODE: SERPENTINE (Multi-row, {len(selected_rows)} rows)")
         return selected, selected_rows, score, warning
 
     # For small arrays (≤10 panels), optimize placement
@@ -416,36 +477,71 @@ def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
     best_warning = None
 
     # Strategy 1: Try to find single-row placement
+    print(f"\n   🔍 STRATEGY 1: Searching for SINGLE-ROW placement...")
     for row_idx, row in enumerate(all_rows):
-        if len(row) >= target_count:
-            # This row can fit all panels in one row!
-            selected = row[:target_count]
-            selected_rows = [selected]
-            score, is_acceptable, warning = score_contiguity(selected, selected_rows, target_count)
+        # Find contiguous sequences within this row
+        contiguous_sequences = find_contiguous_sequences(row, gsd, panel_w=panel_w, panel_spacing=panel_spacing)
 
-            print(f"   Found single-row placement in row {row_idx + 1}: {len(selected)} panels, score={score}")
+        # Show sequence details
+        seq_info = ", ".join([f"{len(seq)} panels" for seq in contiguous_sequences])
+        print(f"   Row {row_idx + 1}: {len(row)} total panels → {len(contiguous_sequences)} sequences ({seq_info})")
 
-            if score > best_score:
-                best_score = score
-                best_config = (selected, selected_rows)
-                best_warning = warning
+        # Check each contiguous sequence
+        for seq_idx, sequence in enumerate(contiguous_sequences):
+            if len(sequence) >= target_count:
+                # This sequence can fit all panels contiguously!
+                selected = sequence[:target_count]
+                selected_rows = [selected]
+                score, is_acceptable, warning = score_contiguity(selected, selected_rows, target_count)
 
-                # Single row with all panels is perfect - use it immediately
-                if len(selected) == target_count:
-                    print(f"   ✓ Using perfect single-row placement from row {row_idx + 1}")
+                print(f"      ✓ Sequence {seq_idx + 1} can fit {target_count} panels!")
+                print(f"      Score={score}, contiguous={is_acceptable}")
+
+                # This should always be acceptable now since we're using contiguous sequences
+                if is_acceptable and score > best_score:
+                    best_score = score
+                    best_config = (selected, selected_rows)
+                    best_warning = warning
+
+                    # Perfect single-row contiguous placement - use it immediately
+                    print(f"\n   ✅ MODE: SINGLE-ROW (Row {row_idx + 1}, Sequence {seq_idx + 1})")
+                    print(f"   All {target_count} panels in ONE continuous row")
                     return selected, selected_rows, score, warning
 
     # Strategy 2: If no single row works, use serpentine (multi-row) placement
     if best_config is None or best_score < 0:
-        print(f"   No single-row placement found, using balanced multi-row serpentine...")
+        print(f"\n   🔍 STRATEGY 2: No single-row possible, using SERPENTINE...")
+
+        # Apply contiguity check to rows for serpentine placement
+        # We need to ensure we select from contiguous sequences within each row
+        contiguous_rows = []
+        for row in all_rows:
+            sequences = find_contiguous_sequences(row, gsd, panel_w=panel_w, panel_spacing=panel_spacing)
+            # Use the longest contiguous sequence from each row
+            if sequences:
+                longest_seq = max(sequences, key=len)
+                contiguous_rows.append(longest_seq)
+
+        selected, selected_rows, score, warning = select_panels_from_grid(
+            all_panels, contiguous_rows, target_count
+        )
+
+        print(f"\n   ✅ MODE: SERPENTINE (Multi-row)")
+        print(f"   {len(selected_rows)} rows used, {len(selected)} total panels")
+        return selected, selected_rows, score, warning
+
+    # Return best configuration found (if any single-row config exists but wasn't perfect)
+    if best_config:
+        print(f"\n   ✅ MODE: SINGLE-ROW (Best available)")
+        print(f"   {len(best_config[1])} rows, score={best_score}")
+        return best_config[0], best_config[1], best_score, best_warning
+    else:
+        # Shouldn't reach here, but fallback to serpentine
+        print(f"\n   ⚠️ No valid configuration found, falling back to serpentine...")
         selected, selected_rows, score, warning = select_panels_from_grid(
             all_panels, all_rows, target_count
         )
         return selected, selected_rows, score, warning
-
-    # Return best configuration found
-    print(f"   Best configuration: {len(best_config[1])} rows, score={best_score}")
-    return best_config[0], best_config[1], best_score, best_warning
 
 def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.13,
                         edge_margin=0.30, panel_spacing=0.05, orientation="Portrait",
@@ -593,8 +689,20 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
             if is_valid:
                 valid_row.append(panel)
 
-        if len(valid_row) >= 1:  # Keep rows with at least 1 panel
-            valid_rows.append(valid_row)
+        # CRITICAL FIX: Split rows with gaps into separate contiguous sequences
+        # This prevents "9 panels" being reported when they have gaps
+        if valid_row:
+            # Sort by X coordinate first
+            valid_row.sort(key=lambda p: p.centroid.x)
+
+            # Find contiguous sequences within this row
+            # Pass GSD for accurate gap detection
+            contiguous_sequences = find_contiguous_sequences(valid_row, gsd, panel_w=actual_w, panel_spacing=panel_spacing)
+
+            # Add each contiguous sequence as a separate row
+            for sequence in contiguous_sequences:
+                if len(sequence) >= 1:
+                    valid_rows.append(sequence)
 
     # Flatten valid panels
     valid_panels_flat = []
@@ -602,9 +710,16 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
         valid_panels_flat.extend(row)
 
     print(f"\n📐 GRID GENERATION:")
-    print(f"   Rows created: {len(valid_rows)}")
+    print(f"   Contiguous rows created: {len(valid_rows)}")
+    print(f"   (Each row is guaranteed to have NO gaps)")
     for i, row in enumerate(valid_rows):
-        print(f"      Row {i+1}: {len(row)} panels")
+        # Calculate physical span
+        if len(row) > 1:
+            x_coords = [p.centroid.x for p in row]
+            span = max(x_coords) - min(x_coords)
+            print(f"      Row {i+1}: {len(row)} panels (contiguous, span: {span:.0f}px)")
+        else:
+            print(f"      Row {i+1}: {len(row)} panel")
     print(f"   Total panels: {len(valid_panels_flat)}")
 
     return valid_panels_flat, valid_rows
