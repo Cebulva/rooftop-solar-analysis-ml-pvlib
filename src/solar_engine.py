@@ -205,31 +205,286 @@ def calculate_solar_potential(lat, lon, tilt, azimuth):
 
 def get_sunny_polygon_mask(roof_only, mask, threshold_offset=20):
     """
-    Finds the sunny area by identifying the dominant brightness peak 
+    Finds the sunny area by identifying the dominant brightness peak
     within the specific roof geometry.
     """
     # 1. Convert to grayscale
     gray = cv2.cvtColor(roof_only, cv2.COLOR_BGR2GRAY)
-    
+
     # 2. Ensure mask is uint8 for OpenCV compatibility
     if mask.dtype != np.uint8:
         mask = mask.astype(np.uint8)
-        
+
     # 3. Apply a Gaussian Blur to reduce pixel noise (e.g. tile textures)
     # This helps in identifying 'areas' rather than individual pixels
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
+
     # 4. Find the 'Peak' brightness inside the ROOF MASK only
     # This ignores bright cars or roads outside the roof
     hist = cv2.calcHist([blurred], [0], mask, [256], [0, 256])
     brightest_significant_val = np.argmax(hist)
-    
+
     # 5. Dynamic Thresholding
     # We define 'Sunny' as anything near that peak brightness
     _, sun_mask = cv2.threshold(blurred, brightest_significant_val - threshold_offset, 255, cv2.THRESH_BINARY)
-    
+
     # 6. CRITICAL: Bitwise AND with the original mask
     # This ensures that even if the threshold is low, we only show results on the ROOF
     final_sun_mask = cv2.bitwise_and(sun_mask, mask)
-    
+
     return final_sun_mask
+
+def create_solar_panel_sprite(width_px, height_px, azimuth):
+    """
+    Creates a realistic solar panel sprite with orientation
+
+    Args:
+        width_px: Width in pixels
+        height_px: Height in pixels (already projected based on tilt)
+        azimuth: Rotation angle in degrees
+
+    Returns:
+        Rotated RGBA image of solar panel
+    """
+    # Create base panel with realistic solar cell appearance
+    panel = np.ones((int(height_px), int(width_px), 4), dtype=np.uint8) * 255
+
+    # Dark blue/black base for solar cells
+    panel[:, :, 0] = 25   # Blue
+    panel[:, :, 1] = 35   # Green
+    panel[:, :, 2] = 60   # Red
+    panel[:, :, 3] = 255  # Alpha
+
+    # Add cell grid pattern (6x10 cells typical for modern panels)
+    cells_h = 6
+    cells_w = 10
+    cell_h = height_px / cells_h
+    cell_w = width_px / cells_w
+
+    # Draw cell borders (silver/gray lines)
+    for i in range(1, cells_h):
+        y = int(i * cell_h)
+        cv2.line(panel, (0, y), (int(width_px), y), (180, 180, 180, 255), 1)
+
+    for j in range(1, cells_w):
+        x = int(j * cell_w)
+        cv2.line(panel, (x, 0), (x, int(height_px)), (180, 180, 180, 255), 1)
+
+    # Add frame border
+    cv2.rectangle(panel, (0, 0), (int(width_px)-1, int(height_px)-1),
+                  (60, 60, 60, 255), 2)
+
+    # Add slight gradient to simulate light reflection
+    gradient = np.linspace(0.8, 1.0, int(height_px))
+    for i in range(3):
+        panel[:, :, i] = (panel[:, :, i] * gradient[:, np.newaxis]).astype(np.uint8)
+
+    # Rotate panel to match azimuth
+    # OpenCV rotation: positive = counter-clockwise
+    # Azimuth: 0° = North, 90° = East, 180° = South, 270° = West
+    # We need to rotate the sprite so it "faces" the azimuth direction
+    center = (width_px / 2, height_px / 2)
+    rotation_matrix = cv2.getRotationMatrix2D(center, -azimuth, 1.0)
+
+    # Calculate new bounding box to prevent clipping
+    cos = np.abs(rotation_matrix[0, 0])
+    sin = np.abs(rotation_matrix[0, 1])
+    new_w = int((height_px * sin) + (width_px * cos))
+    new_h = int((height_px * cos) + (width_px * sin))
+
+    # Adjust rotation matrix for new size
+    rotation_matrix[0, 2] += (new_w / 2) - center[0]
+    rotation_matrix[1, 2] += (new_h / 2) - center[1]
+
+    rotated = cv2.warpAffine(panel, rotation_matrix, (new_w, new_h),
+                             flags=cv2.INTER_LINEAR,
+                             borderMode=cv2.BORDER_CONSTANT,
+                             borderValue=(0, 0, 0, 0))
+
+    return rotated
+
+def overlay_panel_sprite(base_img, panel_polygon, sprite):
+    """
+    Overlays a solar panel sprite onto the base image at the polygon location
+
+    Args:
+        base_img: Background image (BGR)
+        panel_polygon: Shapely Polygon defining panel location
+        sprite: RGBA sprite image
+
+    Returns:
+        Updated base image with panel overlaid
+    """
+    # Get polygon bounds
+    coords = np.array(panel_polygon.exterior.coords[:-1], dtype=np.float32)
+    x, y, w, h = cv2.boundingRect(coords.astype(np.int32))
+
+    # Resize sprite to match polygon size
+    resized_sprite = cv2.resize(sprite, (w, h), interpolation=cv2.INTER_LINEAR)
+
+    # Ensure bounds are within image
+    if y < 0 or x < 0 or y+h > base_img.shape[0] or x+w > base_img.shape[1]:
+        return base_img
+
+    # Extract the region of interest
+    roi = base_img[y:y+h, x:x+w]
+
+    # Separate alpha channel
+    sprite_bgr = resized_sprite[:, :, :3]
+    alpha = resized_sprite[:, :, 3] / 255.0
+
+    # Blend the sprite with the background
+    for c in range(3):
+        roi[:, :, c] = (alpha * sprite_bgr[:, :, c] +
+                        (1 - alpha) * roi[:, :, c]).astype(np.uint8)
+
+    base_img[y:y+h, x:x+w] = roi
+
+    return base_img
+
+def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.13,
+                        edge_margin=0.30, panel_spacing=0.05, orientation="Portrait"):
+    """
+    Creates a grid of panels organized into electrical strings.
+    CRITICAL: Prioritizes COMPLETE ROWS for efficient wiring.
+    Adjusts ONLY the VISUAL HEIGHT based on tilt angle (Cosine Projection).
+    Width remains constant as it's unaffected by tilt in top-down view.
+
+    Args:
+        sunny_mask: Binary mask of sunny area
+        gsd: Ground Sample Distance (meters per pixel)
+        azimuth: Panel orientation in degrees
+        tilt: Panel tilt angle in degrees (0° = flat, 38° = typical pitched)
+        panel_w: Physical panel width in meters (default 1.76m)
+        panel_h: Physical panel height in meters (default 1.13m)
+        edge_margin: Minimum distance from roof edge in meters (default 0.30m)
+        panel_spacing: Gap between panels in meters (default 0.05m)
+        orientation: "Portrait" (vertical) or "Landscape" (horizontal)
+
+    Returns:
+        List of panel polygons organized into complete rows
+    """
+    from shapely.geometry import Polygon
+    from shapely import affinity
+    from src.geometry_utils import mask_to_polygon
+
+    sunny_pts = mask_to_polygon(sunny_mask)
+    if not sunny_pts:
+        return []
+
+    # Handle orientation (swap dimensions for landscape)
+    if orientation == "Landscape":
+        actual_w = panel_h  # 1.13m wide
+        actual_h = panel_w  # 1.76m tall
+    else:  # Portrait
+        actual_w = panel_w  # 1.76m wide
+        actual_h = panel_h  # 1.13m tall
+
+    # Width is NOT affected by tilt in top-down view
+    projected_w = actual_w
+    projected_h = actual_h * math.cos(math.radians(tilt))
+
+    # Convert to pixels
+    pw_px = projected_w / gsd
+    ph_px = projected_h / gsd
+    edge_margin_px = edge_margin / gsd
+    spacing_px = panel_spacing / gsd
+
+    # Create sunny polygon with edge margin buffer
+    sunny_poly = Polygon(sunny_pts).buffer(-edge_margin_px)
+
+    if sunny_poly.is_empty or sunny_poly.area < (pw_px * ph_px):
+        return []
+
+    center = sunny_poly.centroid
+
+    # Rotate polygon to align with azimuth
+    aligned_poly = affinity.rotate(sunny_poly, -azimuth, origin=center)
+
+    minx, miny, maxx, maxy = aligned_poly.bounds
+
+    # Step sizes include spacing
+    step_x = pw_px + spacing_px
+    step_y = ph_px + spacing_px
+
+    # IMPROVED: Generate panels ROW BY ROW and only keep COMPLETE rows
+    # This ensures proper wiring efficiency
+    all_rows = []
+
+    y = miny
+    while y + ph_px <= maxy:
+        row_panels = []
+        x = minx
+
+        while x + pw_px <= maxx:
+            # Create panel rectangle
+            p = Polygon([
+                (x, y),
+                (x + pw_px, y),
+                (x + pw_px, y + ph_px),
+                (x, y + ph_px)
+            ])
+
+            # Check if panel fits
+            if aligned_poly.contains(p.buffer(-0.5)):
+                row_panels.append(p)
+
+            x += step_x
+
+        # Only add rows with at least 2 panels (minimum for wiring)
+        if len(row_panels) >= 2:
+            all_rows.append(row_panels)
+
+        y += step_y
+
+    if not all_rows:
+        return []
+
+    # Flatten to single list of panels
+    aligned_panels = []
+    for row in all_rows:
+        aligned_panels.extend(row)
+
+    # Rotate all panels back to real-world orientation
+    rotated_panels = [affinity.rotate(p, azimuth, origin=center) for p in aligned_panels]
+
+    # Final validation: verify panels are within sunny mask
+    valid_panels = []
+
+    for panel in rotated_panels:
+        panel_coords = np.array(panel.exterior.coords[:-1], dtype=np.int32)
+
+        is_valid = True
+
+        # Check all corners
+        for corner in panel_coords:
+            x, y = int(corner[0]), int(corner[1])
+
+            if x < 0 or y < 0 or y >= sunny_mask.shape[0] or x >= sunny_mask.shape[1]:
+                is_valid = False
+                break
+
+            if sunny_mask[y, x] == 0:
+                is_valid = False
+                break
+
+        # Check center point
+        if is_valid:
+            center_x = int(np.mean(panel_coords[:, 0]))
+            center_y = int(np.mean(panel_coords[:, 1]))
+
+            if (center_x < 0 or center_y < 0 or
+                center_y >= sunny_mask.shape[0] or center_x >= sunny_mask.shape[1] or
+                sunny_mask[center_y, center_x] == 0):
+                is_valid = False
+
+        if is_valid:
+            valid_panels.append(panel)
+
+    print(f"\n📐 GRID GENERATION:")
+    print(f"   Rows created: {len(all_rows)}")
+    for i, row in enumerate(all_rows):
+        print(f"      Row {i+1}: {len(row)} panels")
+    print(f"   Total panels: {len(valid_panels)}")
+
+    return valid_panels
