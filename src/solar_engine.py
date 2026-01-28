@@ -12,7 +12,7 @@ from pvlib.clearsky import ineichen
 # ==========================================
 # ⚙️ ROOF DETECTION CONFIGURATION (Tweak these)
 # ==========================================
-MIN_FLAT_ROOF_COVERAGE = 0.65  # 65% - If usable area is above this, likely flat
+MIN_FLAT_ROOF_COVERAGE = 0.60  # 60% - If usable area is above this, likely flat
 TEXTURE_VARIANCE_THRESHOLD = 15.0  # Standard deviation threshold for texture analysis
 MIN_BRIGHTNESS_DIFF = 30  # Minimum brightness difference to detect pitched roof
 # ==========================================
