@@ -342,8 +342,114 @@ def overlay_panel_sprite(base_img, panel_polygon, sprite):
 
     return base_img
 
+def generate_optimal_grid(sunny_mask, gsd, azimuth, tilt, target_count,
+                         panel_w=1.76, panel_h=1.13, edge_margin=0.30,
+                         panel_spacing=0.05, orientation="Portrait"):
+    """
+    Generates panel grid optimized for target count by trying multiple positions.
+
+    For target_count <= 10:
+    - Tries multiple horizontal and vertical offsets
+    - Evaluates each configuration for contiguity
+    - Returns best layout
+
+    For target_count > 10:
+    - Uses standard maximum capacity grid (no optimization needed)
+
+    Args:
+        sunny_mask: Binary mask of sunny area
+        gsd: Ground Sample Distance (meters per pixel)
+        azimuth: Panel orientation in degrees
+        tilt: Panel tilt angle in degrees
+        target_count: Desired number of panels
+        panel_w: Physical panel width in meters
+        panel_h: Physical panel height in meters
+        edge_margin: Minimum distance from roof edge in meters
+        panel_spacing: Gap between panels in meters
+        orientation: "Portrait" or "Landscape"
+
+    Returns:
+        tuple: (panels_flat, rows_structure, contiguity_score, warning_msg)
+    """
+    from src.panel_optimization import select_panels_from_grid, score_contiguity
+
+    # For large arrays, skip optimization (performance)
+    if target_count > 10:
+        panels_flat, rows_structure = generate_panel_grid(
+            sunny_mask, gsd, azimuth, tilt, panel_w, panel_h,
+            edge_margin, panel_spacing, orientation
+        )
+        if not panels_flat:
+            return [], [], 0, "No valid panel positions found"
+
+        # Select panels and score
+        selected, selected_rows, score, warning = select_panels_from_grid(
+            panels_flat, rows_structure, target_count
+        )
+        return selected, selected_rows, score, warning
+
+    # For small arrays (≤10 panels), optimize placement
+    print(f"\n🔍 OPTIMIZING PLACEMENT for {target_count} panels...")
+
+    # Generate ONE grid covering entire sunny area (no offset)
+    all_panels, all_rows = generate_panel_grid(
+        sunny_mask, gsd, azimuth, tilt, panel_w, panel_h,
+        edge_margin, panel_spacing, orientation
+    )
+
+    if not all_panels:
+        return [], [], 0, "No valid panel positions found"
+
+    total_capacity = len(all_panels)
+    print(f"   Total capacity: {total_capacity} panels across {len(all_rows)} rows")
+
+    if total_capacity < target_count:
+        print(f"   ⚠️ Cannot fit {target_count} panels (max: {total_capacity})")
+        selected, selected_rows, score, warning = select_panels_from_grid(
+            all_panels, all_rows, total_capacity
+        )
+        return selected, selected_rows, score, warning
+
+    # Try to find best placement by testing different row combinations
+    best_score = -9999
+    best_config = None
+    best_warning = None
+
+    # Strategy 1: Try to find single-row placement
+    for row_idx, row in enumerate(all_rows):
+        if len(row) >= target_count:
+            # This row can fit all panels in one row!
+            selected = row[:target_count]
+            selected_rows = [selected]
+            score, is_acceptable, warning = score_contiguity(selected, selected_rows, target_count)
+
+            print(f"   Found single-row placement in row {row_idx + 1}: {len(selected)} panels, score={score}")
+
+            if score > best_score:
+                best_score = score
+                best_config = (selected, selected_rows)
+                best_warning = warning
+
+                # Single row with all panels is perfect - use it immediately
+                if len(selected) == target_count:
+                    print(f"   ✓ Using perfect single-row placement from row {row_idx + 1}")
+                    return selected, selected_rows, score, warning
+
+    # Strategy 2: If no single row works, use serpentine (multi-row) placement
+    if best_config is None or best_score < 0:
+        print(f"   No single-row placement found, using balanced multi-row serpentine...")
+        selected, selected_rows, score, warning = select_panels_from_grid(
+            all_panels, all_rows, target_count
+        )
+        return selected, selected_rows, score, warning
+
+    # Return best configuration found
+    print(f"   Best configuration: {len(best_config[1])} rows, score={best_score}")
+    return best_config[0], best_config[1], best_score, best_warning
+
 def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.13,
-                        edge_margin=0.30, panel_spacing=0.05, orientation="Portrait"):
+                        edge_margin=0.30, panel_spacing=0.05, orientation="Portrait",
+                        x_offset=0.0, y_offset=0.0):
     """
     Generates panels row-by-row for simple serpentine wiring.
 
@@ -357,6 +463,8 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
         edge_margin: Minimum distance from roof edge in meters (default 0.30m)
         panel_spacing: Gap between panels in meters (default 0.05m)
         orientation: "Portrait" (vertical) or "Landscape" (horizontal)
+        x_offset: Horizontal offset in meters (for grid shifting)
+        y_offset: Vertical offset in meters (for grid shifting)
 
     Returns:
         Tuple: (all_panels_flat, rows_structure)
@@ -401,6 +509,12 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
     aligned_poly = affinity.rotate(sunny_poly, -azimuth, origin=center)
 
     minx, miny, maxx, maxy = aligned_poly.bounds
+
+    # Apply grid offsets (in pixels)
+    x_offset_px = x_offset / gsd
+    y_offset_px = y_offset / gsd
+    minx += x_offset_px
+    miny += y_offset_px
 
     # Step sizes include spacing
     step_x = pw_px + spacing_px

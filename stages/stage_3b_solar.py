@@ -18,6 +18,7 @@ from src.solar_engine import (
     create_solar_panel_sprite,  # Panel visualization
     overlay_panel_sprite,
     generate_panel_grid,
+    generate_optimal_grid,  # NEW: Grid optimization for small panel counts
     # Import configuration constants from solar_engine (single source of truth)
     MIN_FLAT_ROOF_COVERAGE,
     TEXTURE_VARIANCE_THRESHOLD,
@@ -184,14 +185,6 @@ def show():
 
     current_irradiance = st.session_state.data.get("current_irradiance", 0)
 
-    # 4. Generate Panel Grid (row-by-row)
-    all_panels_flat, all_rows_structure = generate_panel_grid(
-        sun_mask, gsd, current_azimuth, user_tilt,
-        edge_margin=ROOF_EDGE_MARGIN,
-        panel_spacing=PANEL_SPACING,
-        orientation=current_orientation
-    )
-
     # Calculate actual panel dimensions based on orientation
     if current_orientation == "Landscape":
         display_w = 1.13  # Width when in landscape
@@ -209,16 +202,31 @@ def show():
     print(f"   Edge margin: {ROOF_EDGE_MARGIN}m ({ROOF_EDGE_MARGIN/gsd:.1f} px)")
     print(f"   Azimuth: {current_azimuth}°")
     print(f"   Tilt: {user_tilt}°")
-    print(f"   Total panels available: {len(all_panels_flat)}")
 
-    # Get target count and select panels
+    # Get target count
     limit = st.session_state.data["target_panel_count"]
 
-    # Select panels row-by-row (naturally balanced)
-    panels, selected_rows = select_panels_from_grid(
-        all_panels_flat,
-        all_rows_structure,
-        target_count=limit
+    # 4a. First, generate maximum capacity grid (for slider range)
+    all_panels_flat, all_rows_structure = generate_panel_grid(
+        sun_mask, gsd, current_azimuth, user_tilt,
+        panel_w=1.76,
+        panel_h=1.13,
+        edge_margin=ROOF_EDGE_MARGIN,
+        panel_spacing=PANEL_SPACING,
+        orientation=current_orientation
+    )
+
+    # 4b. Generate Optimized Panel Grid for actual placement
+    # For small counts (≤10), tries multiple positions for best contiguity
+    # For large counts (>10), uses standard maximum capacity grid
+    panels, selected_rows, contiguity_score, grid_warning = generate_optimal_grid(
+        sun_mask, gsd, current_azimuth, user_tilt,
+        target_count=limit,
+        panel_w=1.76,
+        panel_h=1.13,
+        edge_margin=ROOF_EDGE_MARGIN,
+        panel_spacing=PANEL_SPACING,
+        orientation=current_orientation
     )
 
     selected_count = len(panels)
@@ -265,12 +273,18 @@ def show():
             # Overlay each panel as a sprite
             for p in panels:
                 display_img = overlay_panel_sprite(display_img, p, panel_sprite)
-            
+
             # DON'T draw wiring on roof view - it obscures panels
             # Wiring is shown clearly in the separate schematic tab
-            
+
             st.image(display_img, use_container_width=True, caption="Panel placement on roof")
-        
+
+            # Show placement optimization status
+            if grid_warning:
+                st.warning(grid_warning)
+            elif contiguity_score > 0 and selected_count <= 10:
+                st.success(f"✓ Optimized panel placement (contiguity score: {contiguity_score})")
+
         with viz_tabs[1]:
             # Electrical schematic showing serpentine wiring
             if selected_count > 0 and wiring_path:
