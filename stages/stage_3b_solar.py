@@ -119,6 +119,7 @@ def show():
     # Check if shadow tolerance has been confirmed (used throughout the UI)
     shadow_confirmed = st.session_state.data.get("shadow_tolerance_confirmed", False)
 
+
     # Show consumption summary only after shadow tolerance is confirmed
     if shadow_confirmed:
         with st.container(border=True):
@@ -267,22 +268,11 @@ def show():
     with col_main:
         # Show tabs only after shadow tolerance is confirmed
         if shadow_confirmed:
-            viz_tabs = st.tabs(["📍 Roof View", "🔌 Wiring Schematic"])
-            viz_container = viz_tabs[0]
-        else:
-            viz_container = st.container()
+            viz_tabs = st.tabs(["📍 Roof View", "🔌 Wiring Schematic", "🌤️ Shadow Tolerance"])
 
-        with viz_container:
-            # Roof view
-            display_img = roof_only.copy()
-
-            # Yellow Mask Overlay - always shown
-            mask_overlay = np.zeros_like(display_img)
-            mask_overlay[sun_mask > 0] = (0, 255, 255)
-            display_img = cv2.addWeighted(display_img, 1.0, mask_overlay, 0.3, 0)
-
-            # Only show panels and azimuth arrow after shadow tolerance is confirmed
-            if shadow_confirmed:
+            # Tab 1: Roof View with panels (no overlay)
+            with viz_tabs[0]:
+                display_img = roof_only.copy()
                 display_img = draw_azimuth_arrow(display_img, current_azimuth)
 
                 # Create solar panel sprite
@@ -306,8 +296,21 @@ def show():
                     st.warning(grid_warning)
                 elif contiguity_score > 0 and selected_count <= 10:
                     st.success(f"✓ Optimized panel placement (contiguity score: {contiguity_score})")
-            else:
-                st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
+
+        else:
+            # Before confirmation: show shadow tolerance setup view
+            display_img = roof_only.copy()
+
+            # Show pink overlay and green outline during setup
+            if np.any(sun_mask > 0):
+                pink_tint = np.zeros_like(display_img)
+                pink_tint[sun_mask > 0] = (255, 20, 147)  # Hot pink in BGR
+                display_img = cv2.addWeighted(display_img, 1.0, pink_tint, 0.3, 0)
+
+                contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(display_img, contours, -1, (0, 255, 0), 1)  # Green contour, 1px thick
+
+            st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
 
         # Wiring schematic tab - only shown after shadow tolerance is confirmed
         if shadow_confirmed:
@@ -365,7 +368,30 @@ def show():
                         st.info("Configure panels to see electrical schematic")
                 else:
                     st.info("Configure panels to see electrical schematic")
-        
+
+            # Tab 3: Shadow Tolerance adjustment with overlay
+            with viz_tabs[2]:
+                # Create image with pink overlay and green outline
+                shadow_img = roof_only.copy()
+                if np.any(sun_mask > 0):
+                    pink_tint = np.zeros_like(shadow_img)
+                    pink_tint[sun_mask > 0] = (255, 20, 147)  # Hot pink in BGR
+                    shadow_img = cv2.addWeighted(shadow_img, 1.0, pink_tint, 0.3, 0)
+
+                    contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                    cv2.drawContours(shadow_img, contours, -1, (0, 255, 0), 1)  # Green contour, 1px thick
+
+                st.image(shadow_img, use_container_width=True, caption="Usable area overlay")
+
+                st.slider(
+                    "Shadow Tolerance",
+                    0, 100, int(current_threshold),
+                    key="sun_slider_widget",
+                    on_change=update_threshold,
+                    help="Lower values = stricter (only brightest areas). Higher values = more tolerant (include shaded areas)."
+                )
+                st.caption("Adjust this slider to change the usable area. The pink overlay shows areas where panels can be placed.")
+
         if not shadow_confirmed:
             # Step 1: Shadow Tolerance - shown prominently when not yet confirmed
             st.markdown("### 🌤️ Shadow Tolerance")
@@ -505,16 +531,6 @@ def show():
                 else:
                     # For flat roofs, show info but don't allow adjustment (optimal mounting angle)
                     st.info(f"ℹ️ Flat roof panels use {DEFAULT_FLAT_TILT}° mounting angle for optimal drainage and performance.")
-
-            # Shadow Tolerance - at the bottom in collapsed expander after confirmation
-            with st.expander("🌤️ Adjust Shadow Tolerance", expanded=False):
-                st.slider(
-                    "Shadow Tolerance",
-                    0, 100, int(current_threshold),
-                    key="sun_slider_widget",
-                    on_change=update_threshold,
-                    help="Lower values = stricter (only brightest areas). Higher values = more tolerant (include shaded areas)."
-                )
 
     with col_R:
         st.markdown("### 📊 Roof Metrics")
