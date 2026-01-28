@@ -347,12 +347,9 @@ def render_chat_interface():
             messages_to_show = list(reversed(messages_to_show))
             
             for i, msg in enumerate(messages_to_show):
-                # Show divider before user question (except the very first message at top)
-                if msg["role"] == "user" and i > 0:
-                    st.markdown("---")
-                
                 if msg["role"] == "user":
                     st.markdown(f"**❔ :** {msg['content']}")
+                    st.markdown("---")
                 else:
                     st.markdown(f"**☀️ :** {msg['content']}")
 
