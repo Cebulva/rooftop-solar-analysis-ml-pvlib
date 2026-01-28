@@ -27,19 +27,19 @@ from src.solar_engine import (
 # Geometry utilities
 from src.geometry_utils import calculate_azimuth, mask_to_polygon
 
-# Panel optimization - Grouping and selection logic
+# Panel optimization - Simple row-by-row selection
 from src.panel_optimization import (
-    find_contiguous_panel_groups,
-    optimize_panel_selection
+    select_panels_from_grid
 )
 
-# String wiring - Electrical configuration and wiring diagrams
-from src.string_wiring import (
-    organize_panels_into_rows,
-    optimize_string_wiring,
-    generate_serpentine_path,
+# Electrical configuration - Serpentine wiring
+from src.electrical_config import (
+    create_serpentine_wiring,
+    calculate_electrical_specs,
     create_wiring_schematic,
-    draw_wiring_paths
+    PANEL_VOLTAGE,
+    PANEL_CURRENT,
+    PANEL_POWER
 )
 
 # ==========================================
@@ -184,20 +184,14 @@ def show():
 
     current_irradiance = st.session_state.data.get("current_irradiance", 0)
 
-    # 4. Generate Panel Grid with Contiguous Grouping
-    all_possible_panels = generate_panel_grid(
+    # 4. Generate Panel Grid (row-by-row)
+    all_panels_flat, all_rows_structure = generate_panel_grid(
         sun_mask, gsd, current_azimuth, user_tilt,
         edge_margin=ROOF_EDGE_MARGIN,
         panel_spacing=PANEL_SPACING,
         orientation=current_orientation
     )
-    
-    # Apply contiguous grouping filter (min 2 panels per group)
-    valid_contiguous_panels, panel_groups = find_contiguous_panel_groups(
-        all_possible_panels, 
-        min_group_size=MIN_PANELS_PER_STRING
-    )
-    
+
     # Calculate actual panel dimensions based on orientation
     if current_orientation == "Landscape":
         display_w = 1.13  # Width when in landscape
@@ -205,7 +199,7 @@ def show():
     else:  # Portrait
         display_w = 1.76  # Width when in portrait
         display_h = 1.13 * math.cos(math.radians(user_tilt))  # Projected height
-    
+
     # Debug logging
     print(f"\n🔧 PANEL GENERATION DEBUG:")
     print(f"   GSD: {gsd:.4f} m/pixel")
@@ -215,36 +209,30 @@ def show():
     print(f"   Edge margin: {ROOF_EDGE_MARGIN}m ({ROOF_EDGE_MARGIN/gsd:.1f} px)")
     print(f"   Azimuth: {current_azimuth}°")
     print(f"   Tilt: {user_tilt}°")
-    print(f"   Raw panels generated: {len(all_possible_panels)}")
-    print(f"   After contiguous filtering: {len(valid_contiguous_panels)}")
-    
-    # Get target count and optimize selection
+    print(f"   Total panels available: {len(all_panels_flat)}")
+
+    # Get target count and select panels
     limit = st.session_state.data["target_panel_count"]
-    
-    # Use optimized selection that maintains contiguity
-    panels = optimize_panel_selection(
-        all_possible_panels,
-        target_count=limit,
-        min_group_size=MIN_PANELS_PER_STRING
+
+    # Select panels row-by-row (naturally balanced)
+    panels, selected_rows = select_panels_from_grid(
+        all_panels_flat,
+        all_rows_structure,
+        target_count=limit
     )
-    
+
     selected_count = len(panels)
-    
-    # Organize panels into physical rows for optimal wiring
-    panel_rows = organize_panels_into_rows(panels, gsd, current_orientation)
-    
-    # Create optimized string configuration based on actual rows
-    actual_string_configs = optimize_string_wiring(
-        panels,
-        panel_rows,
-        min_string=TYPICAL_MIN_STRING,
-        max_string=TYPICAL_MAX_STRING
-    )
-    
+
+    # Create serpentine wiring path
+    wiring_path = create_serpentine_wiring(panels, selected_rows)
+
+    # Calculate electrical specifications
+    electrical_specs = calculate_electrical_specs(selected_count)
+
     print(f"   Selected for installation: {selected_count} panels")
-    print(f"   String configuration: {len(actual_string_configs)} strings")
-    for config in actual_string_configs:
-        print(f"      String {config['string_id']}: {config['panel_count']} panels")
+    print(f"   System voltage: {electrical_specs['voltage']:.1f}V")
+    print(f"   System current: {electrical_specs['current']:.1f}A")
+    print(f"   System power: {electrical_specs['power']:.0f}W")
 
     # 5. UI Layout
     col_main, col_R = st.columns([4, 1.5])
@@ -284,48 +272,74 @@ def show():
             st.image(display_img, use_container_width=True, caption="Panel placement on roof")
         
         with viz_tabs[1]:
-            # Clean wiring schematic based on ACTUAL roof layout
-            if actual_string_configs and panel_rows:
+            # Electrical schematic showing serpentine wiring
+            if selected_count > 0 and wiring_path:
                 schematic = create_wiring_schematic(
-                    panels, 
-                    actual_string_configs,
-                    panel_rows,  # Pass actual roof rows!
-                    current_orientation
+                    panels,
+                    selected_rows,
+                    wiring_path
                 )
-                st.image(schematic, use_container_width=True, caption="Electrical wiring diagram (matches roof layout)")
-                
-                # Add detailed wiring information
-                st.markdown("### 📋 Wiring Instructions")
-                for string in actual_string_configs:
-                    with st.expander(f"String {string['string_id']} ({string['panel_count']} panels)"):
-                        path = string.get('wiring_path', string['panel_indices'])
-                        st.write(f"**Connection order:** {' → '.join([str(i+1) for i in range(len(path))])}")
-                        st.write(f"**Pattern:** Serpentine (back-and-forth between rows)")
-                        st.write(f"**Start panel:** Panel 1 (marked with green circle)")
-                        st.write(f"**End panel:** Panel {len(path)} (connects to inverter)")
+                if schematic is not None:
+                    st.image(schematic, use_container_width=True, caption="Serpentine Wiring Schematic")
+
+                    # Add detailed electrical information
+                    st.markdown("### ⚡ Electrical Specifications")
+
+                    # System overview
+                    with st.expander("📊 System Overview", expanded=True):
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("System Voltage", f"{electrical_specs['voltage']:.0f}V")
+                        with col2:
+                            st.metric("System Current", f"{electrical_specs['current']:.0f}A")
+                        with col3:
+                            st.metric("System Power", f"{electrical_specs['power']:.0f}W")
+
+                        st.write(f"**Configuration:** Series (All panels in one string)")
+                        st.write(f"**Wiring Pattern:** Serpentine (S-shape)")
+
+                    # Wiring details
+                    with st.expander("🔌 Wiring Instructions"):
+                        st.write(f"**Total Panels:** {selected_count}")
+                        st.write(f"**Wiring Order:** Panel 1 → Panel {selected_count}")
+                        st.write(f"   {' → '.join([f'P{i+1}' for i in range(selected_count)])}")
+                        st.write("")
+                        st.write("**Physical Rule:** Connect + terminal of Panel N to - terminal of Panel N+1")
+                        st.write("**Pattern:** Serpentine (S-pattern) minimizes wire length")
+                        st.write(f"**Voltage:** {electrical_specs['voltage']:.0f}V (31V × {selected_count})")
+                        st.write(f"**Current:** {electrical_specs['current']:.0f}A (constant in series)")
+
+                    # Safety notes
+                    with st.expander("⚠️ Safety & Installation Notes"):
+                        st.write("**Electrical Safety:**")
+                        st.write("- Maximum DC voltage (NEC): 1000V")
+                        st.write("- Minimum inverter start voltage: 200V")
+                        st.write(f"- Your system: {electrical_specs['voltage']:.0f}V ✓")
+
+                        st.write("\n**Installation Guidelines:**")
+                        st.write("- Series panels must be physically adjacent")
+                        st.write("- Use proper DC-rated connectors (MC4)")
+                        st.write("- Follow serpentine pattern to minimize wire runs")
+                        st.write("- Keep wire gauge appropriate for current rating")
+                else:
+                    st.info("Configure panels to see electrical schematic")
             else:
-                st.info("Configure panels to see wiring schematic")
+                st.info("Configure panels to see electrical schematic")
         
         with st.expander("🛠️ Analysis And Adjustments", expanded=True):
-            # Panel Count Slider with String Validation
-            max_capacity = len(valid_contiguous_panels)  # Use filtered count
-            
-            # Enforce minimum panel count for series string
+            # Panel Count Slider
+            max_capacity = len(all_panels_flat)
+
+            # Enforce minimum panel count
             min_installable = max(MIN_PANELS_PER_STRING, 1)
-            
-            # Show warning if roof capacity is below minimum string requirement
+
+            # Show warning if roof capacity is below minimum requirement
             if max_capacity < MIN_PANELS_PER_STRING:
-                st.error(f"⚠️ Roof capacity ({max_capacity} panels) is below the minimum string requirement "
+                st.error(f"⚠️ Roof capacity ({max_capacity} panels) is below the minimum requirement "
                         f"({MIN_PANELS_PER_STRING} panels in series). Installation not viable with current settings.")
             elif max_capacity < TYPICAL_MIN_STRING:
-                st.warning(f"⚠️ Roof capacity ({max_capacity} contiguous panels) is below typical minimum "
+                st.warning(f"⚠️ Roof capacity ({max_capacity} panels) is below typical minimum "
                           f"({TYPICAL_MIN_STRING} panels). Consider adjusting settings or using micro-inverters.")
-            
-            # Show info about filtered panels
-            if len(all_possible_panels) > max_capacity:
-                filtered_count = len(all_possible_panels) - max_capacity
-                st.info(f"ℹ️ Filtered out {filtered_count} isolated panels (below minimum group size of {MIN_PANELS_PER_STRING}). "
-                       f"Panels must be installed in contiguous arrays.")
             
             # Determine default target count (capped by string limits)
             default_target = min(
@@ -445,21 +459,11 @@ def show():
         system_kwp = (selected_count * 440) / 1000
         st.metric("System Size", f"{system_kwp:.2f} kWp")
         
-        # Accurate string configuration based on actual panel layout
-        if selected_count >= MIN_PANELS_PER_STRING and actual_string_configs:
-            num_strings = len(actual_string_configs)
-            
-            if num_strings == 1:
-                config = actual_string_configs[0]
-                st.caption(f"✅ Single string: {config['panel_count']} panels")
-            else:
-                # Show detailed string breakdown
-                string_details = ", ".join([f"{cfg['panel_count']}" for cfg in actual_string_configs])
-                st.caption(f"ℹ️ {num_strings} strings: [{string_details}] panels each")
-                st.caption(f"📍 Wiring: Serpentine pattern (optimized for installation)")
-        elif selected_count >= MIN_PANELS_PER_STRING:
-            # Fallback if string organization failed
-            st.caption(f"ℹ️ {selected_count} panels")
+        # Electrical configuration display
+        if selected_count > 0:
+            st.caption(f"⚡ Configuration: Series (Single String)")
+            st.caption(f"🔌 Wiring: Serpentine pattern")
+            st.caption(f"⚙️ System: {electrical_specs['voltage']:.0f}V @ {electrical_specs['current']:.0f}A")
         
         # NEW: Real-time Irradiance Potential
         st.metric("☀️ Irradiance Potential", 
@@ -487,18 +491,17 @@ def show():
             if selected_count < MIN_PANELS_PER_STRING:
                 st.error(f"Cannot generate report: Minimum {MIN_PANELS_PER_STRING} panels required for series connection.")
             else:
-                # Store accurate string configuration
+                # Store electrical configuration
                 string_config_data = {
-                    'num_strings': len(actual_string_configs),
-                    'strings': [
-                        {
-                            'string_id': cfg['string_id'],
-                            'panel_count': cfg['panel_count']
-                        }
-                        for cfg in actual_string_configs
-                    ]
+                    'num_strings': 1,
+                    'config_type': f"{selected_count} panels in series (Serpentine)",
+                    'wiring_type': 'series',
+                    'total_voltage': electrical_specs['voltage'],
+                    'total_current': electrical_specs['current'],
+                    'panels_per_string': [selected_count],
+                    'wiring_path': wiring_path
                 }
-                
+
                 st.session_state.data["solar_results"] = {
                     "total_roof_area_m2": total_area_m2,
                     "usable_roof_area_m2": usable_area_m2,

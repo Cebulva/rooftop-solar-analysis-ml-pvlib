@@ -345,10 +345,7 @@ def overlay_panel_sprite(base_img, panel_polygon, sprite):
 def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.13,
                         edge_margin=0.30, panel_spacing=0.05, orientation="Portrait"):
     """
-    Creates a grid of panels organized into electrical strings.
-    CRITICAL: Prioritizes COMPLETE ROWS for efficient wiring.
-    Adjusts ONLY the VISUAL HEIGHT based on tilt angle (Cosine Projection).
-    Width remains constant as it's unaffected by tilt in top-down view.
+    Generates panels row-by-row for simple serpentine wiring.
 
     Args:
         sunny_mask: Binary mask of sunny area
@@ -362,7 +359,9 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
         orientation: "Portrait" (vertical) or "Landscape" (horizontal)
 
     Returns:
-        List of panel polygons organized into complete rows
+        Tuple: (all_panels_flat, rows_structure)
+            - all_panels_flat: Flat list of all panels
+            - rows_structure: List of lists, each inner list is a row of panels
     """
     from shapely.geometry import Polygon
     from shapely import affinity
@@ -407,8 +406,7 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
     step_x = pw_px + spacing_px
     step_y = ph_px + spacing_px
 
-    # IMPROVED: Generate panels ROW BY ROW and only keep COMPLETE rows
-    # This ensures proper wiring efficiency
+    # Generate panels ROW BY ROW
     all_rows = []
 
     y = miny
@@ -431,60 +429,68 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
 
             x += step_x
 
-        # Only add rows with at least 2 panels (minimum for wiring)
-        if len(row_panels) >= 2:
+        # Keep row if it has at least 1 panel
+        if len(row_panels) >= 1:
             all_rows.append(row_panels)
 
         y += step_y
 
     if not all_rows:
-        return []
+        return [], []
 
-    # Flatten to single list of panels
-    aligned_panels = []
+    # Rotate all panels back to real-world orientation (keeping row structure)
+    rotated_rows = []
     for row in all_rows:
-        aligned_panels.extend(row)
+        rotated_row = [affinity.rotate(p, azimuth, origin=center) for p in row]
+        rotated_rows.append(rotated_row)
 
-    # Rotate all panels back to real-world orientation
-    rotated_panels = [affinity.rotate(p, azimuth, origin=center) for p in aligned_panels]
+    # Flatten for validation
+    all_panels_flat = []
+    for row in rotated_rows:
+        all_panels_flat.extend(row)
 
     # Final validation: verify panels are within sunny mask
-    valid_panels = []
+    valid_rows = []
+    for row in rotated_rows:
+        valid_row = []
+        for panel in row:
+            panel_coords = np.array(panel.exterior.coords[:-1], dtype=np.int32)
+            is_valid = True
 
-    for panel in rotated_panels:
-        panel_coords = np.array(panel.exterior.coords[:-1], dtype=np.int32)
+            # Check all corners
+            for corner in panel_coords:
+                px, py = int(corner[0]), int(corner[1])
+                if px < 0 or py < 0 or py >= sunny_mask.shape[0] or px >= sunny_mask.shape[1]:
+                    is_valid = False
+                    break
+                if sunny_mask[py, px] == 0:
+                    is_valid = False
+                    break
 
-        is_valid = True
+            # Check center point
+            if is_valid:
+                center_x = int(np.mean(panel_coords[:, 0]))
+                center_y = int(np.mean(panel_coords[:, 1]))
+                if (center_x < 0 or center_y < 0 or
+                    center_y >= sunny_mask.shape[0] or center_x >= sunny_mask.shape[1] or
+                    sunny_mask[center_y, center_x] == 0):
+                    is_valid = False
 
-        # Check all corners
-        for corner in panel_coords:
-            x, y = int(corner[0]), int(corner[1])
+            if is_valid:
+                valid_row.append(panel)
 
-            if x < 0 or y < 0 or y >= sunny_mask.shape[0] or x >= sunny_mask.shape[1]:
-                is_valid = False
-                break
+        if len(valid_row) >= 1:  # Keep rows with at least 1 panel
+            valid_rows.append(valid_row)
 
-            if sunny_mask[y, x] == 0:
-                is_valid = False
-                break
-
-        # Check center point
-        if is_valid:
-            center_x = int(np.mean(panel_coords[:, 0]))
-            center_y = int(np.mean(panel_coords[:, 1]))
-
-            if (center_x < 0 or center_y < 0 or
-                center_y >= sunny_mask.shape[0] or center_x >= sunny_mask.shape[1] or
-                sunny_mask[center_y, center_x] == 0):
-                is_valid = False
-
-        if is_valid:
-            valid_panels.append(panel)
+    # Flatten valid panels
+    valid_panels_flat = []
+    for row in valid_rows:
+        valid_panels_flat.extend(row)
 
     print(f"\n📐 GRID GENERATION:")
-    print(f"   Rows created: {len(all_rows)}")
-    for i, row in enumerate(all_rows):
+    print(f"   Rows created: {len(valid_rows)}")
+    for i, row in enumerate(valid_rows):
         print(f"      Row {i+1}: {len(row)} panels")
-    print(f"   Total panels: {len(valid_panels)}")
+    print(f"   Total panels: {len(valid_panels_flat)}")
 
-    return valid_panels
+    return valid_panels_flat, valid_rows
