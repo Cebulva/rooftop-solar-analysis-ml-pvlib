@@ -246,6 +246,12 @@ def show():
     except (ValueError, TypeError):
         all_panels_flat, all_rows_structure = [], []
 
+    # Cap target panel count to roof capacity if recommended exceeds available space
+    max_roof_capacity = len(all_panels_flat)
+    if max_roof_capacity > 0 and st.session_state.data["target_panel_count"] > max_roof_capacity:
+        st.session_state.data["target_panel_count"] = max_roof_capacity
+        limit = max_roof_capacity
+
     # 4b. Generate Optimized Panel Grid for actual placement
     # For small counts (≤10), tries multiple positions for best contiguity
     # For large counts (>10), uses standard maximum capacity grid
@@ -402,7 +408,7 @@ def show():
 
                 st.slider(
                     "Shadow Tolerance",
-                    -50, 50, int(current_threshold),
+                    -100, 50, int(current_threshold),
                     key="sun_slider_widget",
                     on_change=update_threshold,
                     help="Negative values = very strict (only brightest areas). Positive values = more tolerant (include darker areas)."
@@ -417,7 +423,7 @@ def show():
 
             st.slider(
                 "Shadow Tolerance",
-                -50, 50, int(current_threshold),
+                -100, 50, int(current_threshold),
                 key="sun_slider_widget",
                 on_change=update_threshold,
                 help="Negative values = very strict (only brightest areas). Positive values = more tolerant (include darker areas)."
