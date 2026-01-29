@@ -9,3 +9,4 @@ app_working_copy.py
 /__pycache__
 .env
 .env.template
+/data/inquiries
