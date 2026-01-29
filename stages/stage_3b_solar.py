@@ -147,7 +147,8 @@ def show():
     
     total_area_m2 = np.sum(mask > 0) * pixel_area_m2
     
-    current_threshold = st.session_state.data.get("sun_threshold", 25)
+    # Shadow tolerance: negative values = stricter (only brightest), positive = more inclusive
+    current_threshold = st.session_state.data.get("sun_threshold", 15)
     sun_mask = get_sunny_polygon_mask(roof_only, mask, threshold_offset=current_threshold)
     usable_area_m2 = np.sum(sun_mask > 0) * pixel_area_m2
 
@@ -398,28 +399,28 @@ def show():
 
                 st.slider(
                     "Shadow Tolerance",
-                    0, 100, int(current_threshold),
+                    -50, 50, int(current_threshold),
                     key="sun_slider_widget",
                     on_change=update_threshold,
-                    help="Lower values = stricter (only brightest areas). Higher values = more tolerant (include shaded areas)."
+                    help="Negative values = very strict (only brightest areas). Positive values = more tolerant (include darker areas)."
                 )
-                st.caption("Adjust this slider to change the usable area. The pink overlay shows areas where panels can be placed.")
+                st.caption("Use negative values to select only the brightest roof sections. The pink overlay shows usable area.")
 
         if not shadow_confirmed:
             # Step 1: Shadow Tolerance - shown prominently when not yet confirmed
             st.markdown("### 🌤️ Shadow Tolerance")
             st.caption("Adjust this slider to define which areas of your roof are usable for solar panels. "
-                       "The yellow overlay shows the usable area.")
+                       "Use negative values to select only the brightest sections.")
 
             st.slider(
                 "Shadow Tolerance",
-                0, 100, int(current_threshold),
+                -50, 50, int(current_threshold),
                 key="sun_slider_widget",
                 on_change=update_threshold,
-                help="Lower values = stricter (only brightest areas). Higher values = more tolerant (include shaded areas)."
+                help="Negative values = very strict (only brightest areas). Positive values = more tolerant (include darker areas)."
             )
 
-            st.info("Once you're happy with the usable area (yellow overlay), click the button below to continue.")
+            st.info("Once you're happy with the usable area (pink overlay), click the button below to continue.")
             if st.button("Confirm Shadow Tolerance", type="primary", use_container_width=True):
                 st.session_state.data["shadow_tolerance_confirmed"] = True
                 st.rerun()
