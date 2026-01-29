@@ -6,9 +6,7 @@ import streamlit as st
 from src.inquiry_manager import (
     create_inquiry,
     load_inquiry,
-    list_inquiries,
-    inquiry_exists,
-    get_inquiry_summary
+    inquiry_exists
 )
 
 
@@ -46,72 +44,22 @@ def show():
     # === LOAD PREVIOUS ===
     with col2:
         st.subheader("Load Previous Analysis")
+        st.markdown("""
+        Continue from where you left off:
+        1. Enter your Inquiry ID (e.g., INQ-001)
+        2. Your progress will be restored
+        3. Continue from your last step
 
-        # Get list of saved inquiries
-        inquiries = list_inquiries()
+        *Your Inquiry ID is shown in the sidebar during analysis.*
+        """)
 
-        if inquiries:
-            st.markdown("Select from your recent analyses:")
-
-            # Create display options
-            options = []
-            for inq in inquiries:
-                # Format display string
-                addr = inq.get("address", "")[:30] if inq.get("address") else "No address"
-                step = inq.get("current_step", 1)
-                step_names = {1: "Location", 2: "Roof", 3: "Profile", 4: "Solar", 5: "Report"}
-                step_name = step_names.get(step, f"Step {step}")
-                kwp = inq.get("system_kwp")
-                kwp_str = f" - {kwp:.1f} kWp" if kwp else ""
-
-                display = f"{inq['id']}: {addr} ({step_name}{kwp_str})"
-                options.append((inq['id'], display))
-
-            # Dropdown selection
-            selected_display = st.selectbox(
-                "Select Inquiry",
-                options=[opt[1] for opt in options],
-                key="inquiry_select"
-            )
-
-            # Get selected ID
-            selected_id = None
-            for opt_id, opt_display in options:
-                if opt_display == selected_display:
-                    selected_id = opt_id
-                    break
-
-            # Show summary of selected
-            if selected_id:
-                summary = get_inquiry_summary(selected_id)
-                if summary:
-                    with st.expander("Inquiry Details", expanded=False):
-                        if summary.get("lat") and summary.get("lon"):
-                            st.write(f"**Location:** {summary['lat']:.6f}, {summary['lon']:.6f}")
-                        if summary.get("address"):
-                            st.write(f"**Address:** {summary['address']}")
-                        if summary.get("system_kwp"):
-                            st.write(f"**System Size:** {summary['system_kwp']:.2f} kWp")
-                        st.write(f"**Last Modified:** {summary.get('modified', 'Unknown')[:19]}")
-
-            # Load button
-            if st.button("Load Selected", use_container_width=True):
-                if selected_id:
-                    _load_and_restore(selected_id)
-                else:
-                    st.error("Please select an inquiry first.")
-
-            st.divider()
-
-        # Manual ID entry
-        st.markdown("**Or enter Inquiry ID directly:**")
         manual_id = st.text_input(
             "Inquiry ID",
             placeholder="INQ-001",
             key="manual_inquiry_id"
         ).strip().upper()
 
-        if st.button("Load by ID", use_container_width=True):
+        if st.button("Load Inquiry", type="secondary", use_container_width=True):
             if manual_id:
                 if inquiry_exists(manual_id):
                     _load_and_restore(manual_id)
@@ -119,9 +67,6 @@ def show():
                     st.error(f"Inquiry '{manual_id}' not found.")
             else:
                 st.warning("Please enter an Inquiry ID.")
-
-        if not inquiries:
-            st.info("No saved analyses found. Start a new analysis to begin!")
 
 
 def _load_and_restore(inquiry_id: str):

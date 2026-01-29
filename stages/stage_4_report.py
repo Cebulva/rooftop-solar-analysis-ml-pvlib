@@ -4,6 +4,9 @@ from datetime import datetime
 
 # Import from src
 from src.pdf_generator import generate_solar_report_pdf
+from src.dealer_finder import find_nearby_dealers, init_database, add_sample_dealers
+from src.dealer_grader import get_top_dealers, get_grade_color, GradedDealer
+from src.quote_generator import process_quote_submission
 from src.german_solar_calculator import (
     GermanSolarCalculator,
     ORIENTATION_MAP,
@@ -366,6 +369,9 @@ def render_final_report(lat, lon):
 
             st.dataframe(data_sorted, use_container_width=True)
 
+    # === FIND NEARBY DEALERS ===
+    render_dealer_finder_section(lat, lon, solar_results, analysis)
+
     # === FINAL ACTIONS ===
     st.divider()
     col_btn1, col_btn2 = st.columns(2)
@@ -439,3 +445,234 @@ def reindex_by_month(data):
         data.index = pd.Categorical(data.index, categories=MONTH_ORDER, ordered=True)
         data = data.sort_index()
     return data
+
+
+def render_dealer_finder_section(lat, lon, solar_results, analysis):
+    """Render the Find Nearby Dealers section."""
+    st.divider()
+    st.header("🏪 Find Nearby Solar Installers")
+
+    # Initialize session state for dealers
+    if "dealers_loaded" not in st.session_state:
+        st.session_state.dealers_loaded = False
+    if "graded_dealers" not in st.session_state:
+        st.session_state.graded_dealers = []
+
+    with st.expander("Find installation companies near you", expanded=False):
+        st.markdown("""
+        Find certified solar installers in your area. We'll show you the top 3 dealers
+        ranked by service quality, price competitiveness, and delivery time.
+        """)
+
+        col_search1, col_search2 = st.columns([2, 1])
+        with col_search1:
+            search_radius = st.slider(
+                "Search Radius (km)",
+                min_value=10,
+                max_value=100,
+                value=50,
+                step=10,
+                key="dealer_search_radius"
+            )
+        with col_search2:
+            st.write("")  # Spacer
+            st.write("")
+            search_btn = st.button("🔍 Search Dealers", type="primary", use_container_width=True)
+
+        if search_btn:
+            with st.spinner("Searching for solar installers..."):
+                # Initialize database and add sample dealers for demo
+                init_database()
+                add_sample_dealers()
+
+                # Find dealers
+                system_kwp = solar_results.get("system_kwp", 5.0)
+                dealers = find_nearby_dealers(lat, lon, radius_km=search_radius, limit=10)
+
+                if dealers:
+                    # Grade and rank dealers
+                    graded = get_top_dealers(dealers, system_kwp=system_kwp, limit=3)
+                    st.session_state.graded_dealers = graded
+                    st.session_state.dealers_loaded = True
+                else:
+                    st.warning(f"No solar installers found within {search_radius} km. Try increasing the search radius.")
+                    st.session_state.dealers_loaded = False
+
+        # Display dealers if loaded
+        if st.session_state.dealers_loaded and st.session_state.graded_dealers:
+            st.divider()
+            st.subheader("Top Recommended Installers")
+
+            for i, graded_dealer in enumerate(st.session_state.graded_dealers, 1):
+                render_dealer_card(i, graded_dealer, lat, lon, solar_results, analysis)
+
+            st.divider()
+            st.info("""
+            💡 **Tips:**
+            - Request quotes from multiple dealers to compare prices
+            - Ask about warranties and maintenance services
+            - Check if they handle permits and grid connection
+            """)
+
+
+def render_dealer_card(rank: int, graded_dealer: GradedDealer, lat, lon, solar_results, analysis):
+    """Render a single dealer card with scores and actions."""
+    dealer = graded_dealer.dealer
+    grade_color = get_grade_color(graded_dealer.grade)
+
+    with st.container():
+        # Header row
+        col_info, col_grade = st.columns([4, 1])
+
+        with col_info:
+            st.markdown(f"### #{rank} {graded_dealer.name}")
+            distance_str = f"📍 {graded_dealer.distance_km:.1f} km away"
+            if graded_dealer.rating:
+                rating_str = f" | ⭐ {graded_dealer.rating:.1f}/5 ({graded_dealer.review_count} reviews)"
+            else:
+                rating_str = ""
+            st.caption(distance_str + rating_str)
+
+            if graded_dealer.address:
+                st.write(f"📫 {graded_dealer.address}")
+
+        with col_grade:
+            st.markdown(
+                f"<div style='text-align: center; padding: 10px; background-color: {grade_color}; "
+                f"border-radius: 8px; color: white; font-size: 24px; font-weight: bold;'>"
+                f"{graded_dealer.grade}</div>",
+                unsafe_allow_html=True
+            )
+
+        # Score bars
+        col_s1, col_s2, col_s3 = st.columns(3)
+        with col_s1:
+            st.caption("Quality")
+            st.progress(graded_dealer.quality_score / 100)
+            st.caption(f"{graded_dealer.quality_score:.0f}/100")
+        with col_s2:
+            st.caption("Price")
+            st.progress(graded_dealer.price_score / 100)
+            st.caption(f"{graded_dealer.price_score:.0f}/100")
+        with col_s3:
+            st.caption("Delivery")
+            st.progress(graded_dealer.delivery_score / 100)
+            st.caption(f"{graded_dealer.delivery_score:.0f}/100")
+
+        # Action buttons
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+
+        with col_btn1:
+            if st.button("📧 Request Quote", key=f"quote_{rank}", use_container_width=True):
+                st.session_state[f"show_quote_form_{rank}"] = True
+
+        with col_btn2:
+            if dealer.website:
+                st.link_button("🌐 Website", dealer.website, use_container_width=True)
+            else:
+                st.button("🌐 Website", disabled=True, use_container_width=True, key=f"web_{rank}")
+
+        with col_btn3:
+            if dealer.phone:
+                st.link_button("📞 Call", f"tel:{dealer.phone}", use_container_width=True)
+            else:
+                st.button("📞 Call", disabled=True, use_container_width=True, key=f"call_{rank}")
+
+        # Quote form
+        if st.session_state.get(f"show_quote_form_{rank}", False):
+            render_quote_form(rank, graded_dealer, lat, lon, solar_results, analysis)
+
+        st.divider()
+
+
+def render_quote_form(rank: int, graded_dealer: GradedDealer, lat, lon, solar_results, analysis):
+    """Render the quote request form for a dealer."""
+    st.markdown(f"#### Request Quote from {graded_dealer.name}")
+
+    with st.form(key=f"quote_form_{rank}"):
+        st.markdown("**Pre-filled System Details:**")
+        col_sys1, col_sys2 = st.columns(2)
+        with col_sys1:
+            st.write(f"System Size: **{solar_results.get('system_kwp', 0):.2f} kWp**")
+            st.write(f"Panel Count: **{solar_results.get('panel_count', 0)} panels**")
+        with col_sys2:
+            st.write(f"Roof Area: **{solar_results.get('usable_roof_area_m2', 0):.1f} m²**")
+            address = st.session_state.data.get("address", f"{lat:.4f}, {lon:.4f}")
+            st.write(f"Location: **{address[:30]}...**" if len(address) > 30 else f"Location: **{address}**")
+
+        st.divider()
+        st.markdown("**Your Contact Information:**")
+
+        customer_name = st.text_input("Name *", key=f"cust_name_{rank}")
+        customer_email = st.text_input("Email *", key=f"cust_email_{rank}")
+        customer_phone = st.text_input("Phone (optional)", key=f"cust_phone_{rank}")
+
+        st.divider()
+        st.markdown("**Additional Options:**")
+
+        col_opt1, col_opt2, col_opt3 = st.columns(3)
+        with col_opt1:
+            include_battery = st.checkbox("Include battery storage", key=f"opt_battery_{rank}")
+        with col_opt2:
+            include_financing = st.checkbox("Financing options", key=f"opt_finance_{rank}")
+        with col_opt3:
+            include_permits = st.checkbox("Permit assistance", key=f"opt_permits_{rank}")
+
+        additional_notes = st.text_area("Additional notes or questions", key=f"notes_{rank}")
+
+        col_submit, col_cancel = st.columns(2)
+        with col_submit:
+            submitted = st.form_submit_button("📤 Send Quote Request", type="primary", use_container_width=True)
+        with col_cancel:
+            cancelled = st.form_submit_button("Cancel", use_container_width=True)
+
+        if submitted:
+            if not customer_name or not customer_email:
+                st.error("Please fill in your name and email address.")
+            elif "@" not in customer_email:
+                st.error("Please enter a valid email address.")
+            else:
+                # Process the quote submission
+                customer_info = {
+                    "name": customer_name,
+                    "email": customer_email,
+                    "phone": customer_phone if customer_phone else None,
+                    "notes": additional_notes if additional_notes else None,
+                    "include_battery": include_battery,
+                    "include_financing": include_financing,
+                    "include_permits": include_permits
+                }
+
+                location = {
+                    "lat": lat,
+                    "lon": lon,
+                    "address": st.session_state.data.get("address", ""),
+                    "orientation": st.session_state.data.get("roof_orientation_name", "South")
+                }
+
+                inquiry_id = st.session_state.get("inquiry_id", "")
+
+                success, message, quote_id = process_quote_submission(
+                    graded_dealer=graded_dealer,
+                    solar_results=solar_results,
+                    final_analysis=analysis,
+                    location=location,
+                    customer_info=customer_info,
+                    inquiry_id=inquiry_id
+                )
+
+                if success:
+                    st.success(f"Quote request sent to {graded_dealer.name}!")
+                    st.balloons()
+                    st.session_state[f"show_quote_form_{rank}"] = False
+                else:
+                    # If email not configured, still save and show success
+                    if "not configured" in message.lower():
+                        st.warning("Quote saved! Email sending is not configured. Please contact the dealer directly.")
+                        st.info(f"Dealer contact: {graded_dealer.email or graded_dealer.phone or graded_dealer.website or 'Visit their website'}")
+                    else:
+                        st.error(f"Failed to send: {message}")
+
+        if cancelled:
+            st.session_state[f"show_quote_form_{rank}"] = False
+            st.rerun()
