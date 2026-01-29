@@ -49,3 +49,4 @@ dependencies:
     - pysolar>=0.10  
     - groq
     - python-dotenv==1.2.1
+    - fpdf2>=2.7.0

@@ -619,6 +619,26 @@ def show():
             if selected_count < MIN_PANELS_PER_STRING:
                 st.error(f"Cannot generate report: Minimum {MIN_PANELS_PER_STRING} panels required for series connection.")
             else:
+                # Generate and store images for PDF export
+                # Panel placement image
+                pdf_panel_img = roof_only.copy()
+                pdf_panel_img = draw_azimuth_arrow(pdf_panel_img, current_azimuth)
+                if current_orientation == "Landscape":
+                    pdf_panel_w_px = 1.13 / gsd
+                    pdf_panel_h_px = (1.76 * math.cos(math.radians(user_tilt))) / gsd
+                else:
+                    pdf_panel_w_px = 1.76 / gsd
+                    pdf_panel_h_px = (1.13 * math.cos(math.radians(user_tilt))) / gsd
+                pdf_panel_sprite = create_solar_panel_sprite(pdf_panel_w_px, pdf_panel_h_px, current_azimuth)
+                for p in panels:
+                    pdf_panel_img = overlay_panel_sprite(pdf_panel_img, p, pdf_panel_sprite)
+                st.session_state.data["pdf_panel_image"] = pdf_panel_img
+
+                # Wiring schematic image
+                if panels and wiring_path:
+                    pdf_wiring_img = create_wiring_schematic(panels, selected_rows, wiring_path)
+                    st.session_state.data["pdf_wiring_image"] = pdf_wiring_img
+
                 # Store electrical configuration
                 string_config_data = {
                     'num_strings': 1,

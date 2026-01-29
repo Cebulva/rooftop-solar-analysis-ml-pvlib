@@ -1,7 +1,9 @@
 import streamlit as st
 import pandas as pd
+from datetime import datetime
 
 # Import from src
+from src.pdf_generator import generate_solar_report_pdf
 from src.german_solar_calculator import (
     GermanSolarCalculator,
     ORIENTATION_MAP,
@@ -268,6 +270,9 @@ def render_final_report(lat, lon):
     st.divider()
     st.header("📊 Detailed Solar Analysis")
 
+    # Initialize for PDF export (will be set if data loads successfully)
+    data_sorted = None
+
     with st.spinner("Fetching satellite weather data..."):
         # Solar Analysis
         data, error_msg = analyze_solar_potential(lat, lon)
@@ -366,8 +371,35 @@ def render_final_report(lat, lon):
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
-        if st.button("📥 Download PDF Report", use_container_width=True, type="primary"):
-            st.info("PDF export coming soon!")
+        # Get images from session state (stored in stage 3b)
+        panel_image = st.session_state.data.get("pdf_panel_image")
+        wiring_image = st.session_state.data.get("pdf_wiring_image")
+
+        # Get monthly data if available
+        monthly_data = data_sorted if data_sorted is not None else None
+
+        try:
+            pdf_bytes = generate_solar_report_pdf(
+                solar_results=solar_results,
+                consumption_inputs=consumption_inputs,
+                final_analysis=analysis,
+                location={'lat': lat, 'lon': lon},
+                panel_image=panel_image,
+                wiring_image=wiring_image,
+                monthly_data=monthly_data,
+            )
+
+            st.download_button(
+                label="📥 Download PDF Report",
+                data=pdf_bytes,
+                file_name=f"solar_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                mime="application/pdf",
+                use_container_width=True,
+                type="primary"
+            )
+        except Exception as e:
+            if st.button("📥 Download PDF Report", use_container_width=True, type="primary"):
+                st.error(f"Error generating PDF: {str(e)}")
 
     with col_btn2:
         if st.button("🔄 Start New Analysis", use_container_width=True):
