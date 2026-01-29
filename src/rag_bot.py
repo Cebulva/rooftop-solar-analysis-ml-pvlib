@@ -103,14 +103,49 @@ Snow load zones (DIN EN 1991-1-3/NA):
 - Zone 3: 1.10 kN/m² (alpine/high elevation)
 - Roof snow load = ground load × shape coefficient (e.g., 0.8 for flat roofs)
 
+Finding certified solar installers:
+- BSW-Solar Installer Directory: https://www.solarwirtschaft.de/fachpartnersuche/
+- Handwerkskammer (Chamber of Crafts): https://www.handwerkskammer.de/
+- Users can search by postal code or city to find local certified installers
+
+Residential vs Commercial solar systems (Germany):
+- Up to 30 kWp: Residential (Kleinanlage) - simplified registration, full EEG tariff
+- 30-100 kWp: Transition zone - still eligible for residential programs in most cases
+- Over 100 kWp: Commercial - requires business registration (Gewerbeanmeldung), different tax treatment
+
 === RESPONSE STYLE ===
 
 - Keep initial answers short (30-60 words)
 - Expand only when user asks follow-up
 - Be friendly and supportive
 - Avoid tables (use short paragraphs or bullets)
-- Always end with:
+- MANDATORY: Always end with EXACTLY this format:
   Next question: <1-2 word suggestion>
+
+=== CRITICAL: FOLLOW-UP QUESTION RULES ===
+
+YOU MUST ALWAYS PROVIDE A FOLLOW-UP QUESTION. This is NOT optional.
+
+Your follow-up suggestion MUST be COMPLETELY DIFFERENT from what was just discussed.
+
+FORBIDDEN - Never suggest these after discussing related topics:
+- If discussed: installer/installation/permitting/approval/process → DON'T suggest: contractor/builder/setup/certification/licensing/regulations
+- If discussed: costs/pricing/investment → DON'T suggest: expenses/budget/financing/affordability/money
+- If discussed: subsidies/programs/funding → DON'T suggest: grants/incentives/support/financing/förderung
+- If discussed: ROI/payback/savings → DON'T suggest: returns/profit/earnings/benefits/value
+
+REQUIRED - Suggest topics from DIFFERENT categories:
+- Technical: panel efficiency, inverter types, monitoring systems
+- Maintenance: cleaning schedule, inspection needs, lifespan
+- Practical: weather impact, snow removal, bird protection
+- Integration: battery storage, EV charging, heat pump
+- Future: system expansion, technology upgrades
+
+EXAMPLE GOOD PROGRESSIONS:
+After "installer" → suggest "Panel warranties" (different category)
+After "costs" → suggest "Maintenance" (different category)  
+After "subsidies" → suggest "Battery options" (different category)
+After "ROI" → suggest "Weather impact" (different category)
 
 === SELF-CHECK BEFORE RESPONDING ===
 
@@ -127,20 +162,6 @@ Snow load zones (DIN EN 1991-1-3/NA):
    - REPORT MODE → Check for "typically", "usually", "your report", etc.
 
 """
-
-# Fallback questions if LLM doesn't generate one
-FALLBACK_QUESTIONS = [
-    "Installation process",
-    "Payback time",
-    "Maintenance costs",
-    "Battery storage",
-    "Grid connection",
-    "Roof suitability",
-    "System warranty",
-    "Energy monitoring",
-    "Tax benefits",
-    "Installer selection"
-]
 
 def get_financial_benefits(state=None):
     """Return formatted financial summary with program types for a given German state"""
@@ -192,14 +213,27 @@ def get_financial_benefits(state=None):
             
             # Add link
             if link:
-                line += f" [More info]({link})"
+                link_url = link if link.startswith("http") else f"https://{link}"
+                line += f" - [More info]({link_url})"
             
             lines.append(line)
 
-        return "Available financial programs:\n" + "\n".join(lines)
+        # Use two spaces + newline for proper markdown line breaks
+        return "Available financial programs:\n" + "  \n".join(lines)
 
     except Exception as e:
         return f"Error accessing financial programs: {str(e)}"
+
+def initialize_chat():
+    if "rag_bot" not in st.session_state:
+        st.session_state.rag_bot = {
+            "messages": [{"role": "assistant", "content": "Ask me anything!"}],
+            "expanded": False,  # Start closed
+            "report_ready": False,
+            "next_question": "How solar works",  # Initial suggestion
+            "used_fallbacks": set(),
+            "user_state": None  # Store user's state for targeted subsidy info
+        }
 
 def get_report_data():
     """Build personalized solar system summary for the user (starts with conclusions)."""
@@ -304,17 +338,6 @@ def get_report_data():
 
     return report_context
 
-
-def initialize_chat():
-    if "rag_bot" not in st.session_state:
-        st.session_state.rag_bot = {
-            "messages": [{"role": "assistant", "content": "Ask me anything!"}],
-            "expanded": False,  # Start closed
-            "report_ready": False,
-            "next_question": "System costs",  # More specific than "PV basics"
-            "used_fallbacks": set(),
-            "user_state": None  # Store user's state for targeted subsidy info
-        }
 
 def get_fallback_question(state):
     """Get a random fallback question that hasn't been used recently"""
@@ -455,7 +478,7 @@ def generate_report_summary():
                 program_lines.append(f"• {scope_text} {prog_type}: {program}{bonus_text} – {subsidy}{link_text}")
 
             # Use two spaces + newline for proper markdown line breaks
-            programs_text = "  \n".join(program_lines)
+            programs_text = "  \n\n".join(program_lines)
         else:
             programs_text = "No financial programs found."
 
@@ -464,8 +487,8 @@ def generate_report_summary():
         actual_kwp = solar_results.get("system_kwp", 0)
 
         main_msg = (
-            f"☀️ Congratulations! Your {actual_kwp:.1f} kWp solar setup is ready!\n\n"
-            f"Maximize your savings with:\n\n{programs_text}\n\n"
+            f"Your {actual_kwp:.1f} kWp solar setup is ready!\n\n"
+            f"Savings you are eligible for:\n\n{programs_text}\n\n"
             "Ask me anything!"
         )
 
@@ -543,16 +566,15 @@ def render_chat_interface():
                     st.markdown(f"**☀️ :** {msg['content']}")
 
         # --- Single follow-up button below messages ---
-        if not state.get("next_question"):
-            state["next_question"] = get_fallback_question(state)
+        # Show button - use LLM suggestion or fallback to "More details"
+        follow_up_text = state.get("next_question") or "More details"
         
-        if state.get("next_question"):
-            button_key = f"followup_{hash(state['next_question'])}"
-            if st.button(f"➡️ {state['next_question']}", key=button_key, use_container_width=True):
-                question_to_send = state["next_question"]
-                state["next_question"] = None
-                handle_message(question_to_send)
-                st.rerun()
+        button_key = f"followup_{abs(hash(follow_up_text))}"
+        if st.button(f"➡️ {follow_up_text}", key=button_key, width="stretch"):
+            question_to_send = follow_up_text
+            state["next_question"] = None  # Clear for next time
+            handle_message(question_to_send)
+            st.rerun()
 
         # --- Input field at the bottom ---
         if "rag_bot_user_input" not in st.session_state:
@@ -629,14 +651,19 @@ def handle_message(prompt):
             try:
                 next_q = content.split("Next question:")[1].strip().split("\n")[0]
                 next_q = next_q.replace("*", "").replace("**", "").strip()
-                if next_q and "used_fallbacks" in state:
-                    state["used_fallbacks"].clear()
+                # Only use if it's not empty and not too long
+                if next_q and len(next_q) < 50:
+                    pass  # Valid question
+                else:
+                    next_q = None
             except:
                 next_q = None
 
         # Append assistant message without the follow-up
         main_content = content.split("Next question:")[0].strip()
         state["messages"].append({"role": "assistant", "content": main_content})
+        
+        # Set next question (None if LLM didn't generate one)
         state["next_question"] = next_q
 
     except Exception as e:
