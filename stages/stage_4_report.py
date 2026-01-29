@@ -387,12 +387,20 @@ def render_final_report(lat, lon):
                 panel_image=panel_image,
                 wiring_image=wiring_image,
                 monthly_data=monthly_data,
+                inquiry_id=st.session_state.get("inquiry_id"),
             )
+
+            # Generate filename with inquiry ID if available
+            inquiry_id = st.session_state.get("inquiry_id")
+            if inquiry_id:
+                filename = f"solar_report_{inquiry_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            else:
+                filename = f"solar_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
 
             st.download_button(
                 label="📥 Download PDF Report",
                 data=pdf_bytes,
-                file_name=f"solar_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
+                file_name=filename,
                 mime="application/pdf",
                 use_container_width=True,
                 type="primary"

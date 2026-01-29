@@ -65,6 +65,7 @@ def generate_solar_report_pdf(
     panel_image: Optional[np.ndarray] = None,
     wiring_image: Optional[np.ndarray] = None,
     monthly_data: Optional[Any] = None,
+    inquiry_id: Optional[str] = None,
 ) -> bytes:
     """
     Generate a complete PDF report for solar panel analysis.
@@ -77,6 +78,7 @@ def generate_solar_report_pdf(
         panel_image: BGR numpy array of panel placement visualization
         wiring_image: BGR numpy array of wiring schematic
         monthly_data: DataFrame with monthly production data
+        inquiry_id: Optional inquiry ID for reference
 
     Returns:
         PDF file as bytes
@@ -92,6 +94,11 @@ def generate_solar_report_pdf(
     pdf.cell(0, 10, 'Rooftop Solar Analysis Report', 0, 1, 'C')
     pdf.set_font('Helvetica', '', 10)
     pdf.cell(0, 6, f'Generated: {datetime.now().strftime("%Y-%m-%d %H:%M")}', 0, 1, 'C')
+
+    # Inquiry ID
+    if inquiry_id:
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(0, 6, f'Reference ID: {inquiry_id}', 0, 1, 'C')
     pdf.ln(3)
 
     # Location info
