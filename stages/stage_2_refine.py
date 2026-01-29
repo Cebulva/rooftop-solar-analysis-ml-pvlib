@@ -25,7 +25,8 @@ def show(get_model):
             st.session_state.data["res"] = {
                 'zoom_img': raw_data["zoom_img"],
                 'initial_poly': raw_data["initial_poly"],
-                'offsets': raw_data["offsets"]
+                'offsets': raw_data["offsets"],
+                'source': raw_data["source"]
             }
             # We also store the full image globally for Step 3
             st.session_state.data["full_img"] = raw_data["full_img"]
@@ -37,11 +38,18 @@ def show(get_model):
     # --- YOUR STABLE UI LOGIC STARTS HERE ---
     # Back button to change location
     if st.button("⬅️ Back to Location Selection", key="back_to_step1"):
-        # Clear analysis data so it re-runs for new location
-        if "res" in st.session_state.data:
-            del st.session_state.data["res"]
-        if "full_img" in st.session_state.data:
-            del st.session_state.data["full_img"]
+        # Clear all analysis data so a new building starts fresh
+        keys_to_clear = [
+            "res", "full_img", "adjust_canvas_init", "final_poly",
+            "auto_roof_type", "detected_roof_type", "roof_type_manually_set",
+            "user_azimuth", "user_tilt", "panel_orientation",
+            "detection_confidence", "detection_debug",
+            "shadow_tolerance_confirmed", "sun_threshold",
+            "target_panel_count", "current_irradiance",
+            "solar_results", "pdf_panel_image",
+        ]
+        for key in keys_to_clear:
+            st.session_state.data.pop(key, None)
         st.session_state.step = 1
         st.rerun()
 
@@ -140,6 +148,11 @@ def render_adjust(base_resized, scaling_factor, display_h, res):
                 st.rerun()
 
     with col_dash:
+        detection_source = res.get("source", "ml")
+        if detection_source == "osm":
+            st.info("Detection: **OSM Footprint**")
+        else:
+            st.info("Detection: **ML Model**")
         st.markdown("### 📊 Metrics")
         if extracted_pts_raw:
             lat = st.session_state.data["confirmed_lat"]
