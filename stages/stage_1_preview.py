@@ -2,6 +2,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import ui_components as ui
+from src.inquiry_manager import save_inquiry
 
 def show():
     """
@@ -66,6 +67,16 @@ def show():
                     # Save coordinates and move to Step 2 where inference actually happens
                     st.session_state.data["confirmed_lat"] = sel_lat
                     st.session_state.data["confirmed_lon"] = sel_lon
+
+                    # Auto-save inquiry
+                    if st.session_state.get("inquiry_id"):
+                        save_inquiry(
+                            st.session_state.inquiry_id,
+                            st.session_state.data,
+                            step=2,
+                            sub_step="verify"
+                        )
+
                     st.session_state.step = 2
                     st.rerun()
         else:

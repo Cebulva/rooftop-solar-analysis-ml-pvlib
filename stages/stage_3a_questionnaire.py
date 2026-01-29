@@ -8,6 +8,7 @@ from src.german_solar_calculator import (
     ADD_ONS,
     CONSTANTS
 )
+from src.inquiry_manager import save_inquiry
 
 
 def show():
@@ -99,6 +100,15 @@ def show():
 
             # Store recommended panel count for stage 3b
             st.session_state.data["recommended_count"] = recommended_panels
+
+            # Auto-save inquiry
+            if st.session_state.get("inquiry_id"):
+                save_inquiry(
+                    st.session_state.inquiry_id,
+                    st.session_state.data,
+                    step=4,
+                    sub_step="verify"
+                )
 
             st.session_state.step = 4
             st.rerun()

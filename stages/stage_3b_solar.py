@@ -28,6 +28,9 @@ from src.solar_engine import (
 # Geometry utilities
 from src.geometry_utils import calculate_azimuth, mask_to_polygon
 
+# Inquiry management
+from src.inquiry_manager import save_inquiry
+
 # Panel optimization - Simple row-by-row selection
 from src.panel_optimization import (
     select_panels_from_grid
@@ -664,5 +667,15 @@ def show():
                     "coverage_percentage": coverage_pct,
                     "string_configuration": string_config_data
                 }
+
+                # Auto-save inquiry (includes images stored earlier)
+                if st.session_state.get("inquiry_id"):
+                    save_inquiry(
+                        st.session_state.inquiry_id,
+                        st.session_state.data,
+                        step=5,
+                        sub_step="verify"
+                    )
+
                 st.session_state.step = 5
                 st.rerun()

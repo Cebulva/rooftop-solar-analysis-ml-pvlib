@@ -1,0 +1,187 @@
+{
+  "confirmed_lat": 52.5173294,
+  "confirmed_lon": 13.5536902,
+  "res": {
+    "initial_poly": [
+      [
+        66,
+        64
+      ],
+      [
+        55,
+        142
+      ],
+      [
+        153,
+        155
+      ],
+      [
+        164,
+        77
+      ]
+    ],
+    "offsets": [
+      90,
+      90
+    ]
+  },
+  "adjust_canvas_init": {
+    "version": "4.4.0",
+    "objects": [
+      {
+        "type": "path",
+        "path": "M 210.0 203.63636363636363 L 175.0 451.8181818181818 L 486.8181818181818 493.18181818181813 L 521.8181818181818 245.0 Z",
+        "fill": "rgba(0, 255, 255, 0.3)",
+        "stroke": "#00FFFF",
+        "strokeWidth": 2,
+        "selectable": false,
+        "evented": false
+      },
+      {
+        "type": "circle",
+        "left": 202.0,
+        "top": 195.63636363636363,
+        "radius": 8,
+        "fill": "#00FFFF",
+        "stroke": "#000000",
+        "strokeWidth": 2,
+        "selectable": true,
+        "hasControls": false,
+        "name": "v_000"
+      },
+      {
+        "type": "circle",
+        "left": 167.0,
+        "top": 443.8181818181818,
+        "radius": 8,
+        "fill": "#00FFFF",
+        "stroke": "#000000",
+        "strokeWidth": 2,
+        "selectable": true,
+        "hasControls": false,
+        "name": "v_001"
+      },
+      {
+        "type": "circle",
+        "left": 478.8181818181818,
+        "top": 485.18181818181813,
+        "radius": 8,
+        "fill": "#00FFFF",
+        "stroke": "#000000",
+        "strokeWidth": 2,
+        "selectable": true,
+        "hasControls": false,
+        "name": "v_002"
+      },
+      {
+        "type": "circle",
+        "left": 513.8181818181818,
+        "top": 237.0,
+        "radius": 8,
+        "fill": "#00FFFF",
+        "stroke": "#000000",
+        "strokeWidth": 2,
+        "selectable": true,
+        "hasControls": false,
+        "name": "v_003"
+      }
+    ],
+    "background": ""
+  },
+  "final_poly": [
+    [
+      66.0,
+      64.00114285714285
+    ],
+    [
+      55.0,
+      142.00057142857145
+    ],
+    [
+      153.00057142857145,
+      154.99942857142858
+    ],
+    [
+      164.00057142857145,
+      77.0
+    ]
+  ],
+  "consumption_inputs": {
+    "building_type": "Single Family House",
+    "b_type_code": "house",
+    "people": 2,
+    "has_water_heater": true,
+    "has_ev": false,
+    "has_heat_pump": false,
+    "annual_kwh": 4000,
+    "breakdown": {
+      "Base consumption": 3000,
+      "Electric water heater": 1000,
+      "Total": 4000
+    }
+  },
+  "recommended_count": 9,
+  "target_panel_count": 9,
+  "detection_confidence": 0.7450980392156863,
+  "detection_debug": {
+    "coverage_ratio": 0.2504424778761062,
+    "brightness_range": 190,
+    "std_dev": 4.805733776942991,
+    "flat_score_coverage": 0.2504424778761062,
+    "pitched_score_brightness": 0.7450980392156863,
+    "pitched_score_texture": 0.0,
+    "reason": "Brightness range (190) indicates shadow on one side"
+  },
+  "detected_roof_type": "Pitched",
+  "auto_roof_type": "Pitched",
+  "user_azimuth": 187.5563440322876,
+  "user_tilt": 38.0,
+  "panel_orientation": "Portrait",
+  "roof_type_manually_set": false,
+  "current_irradiance": 929.5448014857377,
+  "shadow_tolerance_confirmed": true,
+  "solar_results": {
+    "total_roof_area_m2": 261.12949000146295,
+    "usable_roof_area_m2": 65.39791652249029,
+    "panel_count": 9,
+    "system_kwp": 3.96,
+    "azimuth": 187.5563440322876,
+    "tilt_angle": 38.0,
+    "panel_orientation": "Portrait",
+    "roof_form": "Pitched",
+    "irradiance_potential": 929.5448014857377,
+    "annual_production_kwh": 5139.1325144581315,
+    "coverage_percentage": 128.47831286145328,
+    "string_configuration": {
+      "num_strings": 1,
+      "config_type": "9 panels in series (Serpentine)",
+      "wiring_type": "series",
+      "total_voltage": 279,
+      "total_current": 13,
+      "panels_per_string": [
+        9
+      ],
+      "wiring_path": [
+        0,
+        1,
+        2,
+        3,
+        8,
+        7,
+        6,
+        5,
+        4
+      ]
+    }
+  },
+  "_images": {
+    "zoom_img": "zoom_img.png",
+    "full_img": "full_img.png",
+    "pdf_panel_image": "panel_image.png",
+    "pdf_wiring_image": "wiring_image.png"
+  },
+  "inquiry_id": "INQ-001",
+  "step": 5,
+  "sub_step": "verify",
+  "saved_at": "2026-01-29T10:53:45.517742"
+}

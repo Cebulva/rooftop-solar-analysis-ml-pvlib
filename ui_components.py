@@ -35,6 +35,10 @@ def render_sidebar():
     with st.sidebar:
         st.title("SolarSight AI")
 
+        # Show current inquiry ID if active
+        if st.session_state.get("inquiry_id"):
+            st.info(f"**Inquiry:** {st.session_state.inquiry_id}")
+
         # Address Search
         st.subheader("📍 Find Location")
         address_input = st.text_input(
@@ -90,9 +94,10 @@ def render_sidebar():
 
         # New Search button
         if st.button("🔄 New Search", type="primary", use_container_width=True):
-            st.session_state.step = 1
+            st.session_state.step = 0
             st.session_state.sub_step = "verify"
             st.session_state.data = {}
+            st.session_state.inquiry_id = None
             st.session_state["selected_pos"] = None
             st.cache_data.clear()
             st.rerun()

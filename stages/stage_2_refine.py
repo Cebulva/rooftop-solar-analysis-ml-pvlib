@@ -6,6 +6,7 @@ from streamlit_drawable_canvas import st_canvas
 import ui_components as ui
 from src.ai_pipeline import get_initial_rooftop_data
 from src.solar_engine import calculate_global_gsd
+from src.inquiry_manager import save_inquiry
 
 def show(get_model):
     # 1. SILENT INITIALIZATION (Uses the new src/ai_pipeline)
@@ -87,7 +88,16 @@ def render_verify(base_resized, scaling_factor, res):
             btn_left, btn_right = st.columns(2)
             if btn_left.button("✅ Correct", use_container_width=True, type="primary"):
                 st.session_state.data["final_poly"] = res['initial_poly']
-                st.session_state.step = 3; st.rerun()
+                # Auto-save inquiry
+                if st.session_state.get("inquiry_id"):
+                    save_inquiry(
+                        st.session_state.inquiry_id,
+                        st.session_state.data,
+                        step=3,
+                        sub_step="verify"
+                    )
+                st.session_state.step = 3
+                st.rerun()
             if btn_right.button("✏️ Adjust", use_container_width=True):
                 st.session_state.sub_step = "adjust"; st.rerun()
 
@@ -190,7 +200,16 @@ def render_verify_custom(base_resized, scaling_factor):
         with sub_col:
             c1, c2 = st.columns(2)
             if c1.button("✅ Perfect", use_container_width=True, type="primary"):
-                st.session_state.step = 3; st.rerun()
+                # Auto-save inquiry
+                if st.session_state.get("inquiry_id"):
+                    save_inquiry(
+                        st.session_state.inquiry_id,
+                        st.session_state.data,
+                        step=3,
+                        sub_step="verify"
+                    )
+                st.session_state.step = 3
+                st.rerun()
             if c2.button("🔄 Redraw", use_container_width=True):
                 # Convert final_poly back to draggable state
                 pts = st.session_state.data["final_poly"]

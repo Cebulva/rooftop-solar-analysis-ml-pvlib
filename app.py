@@ -7,10 +7,11 @@ import streamlit.elements.image as st_image
 # --- CUSTOM IMPORTS ---
 import ui_components as ui
 from stages import (
-    stage_1_preview, 
-    stage_2_refine, 
+    stage_0_start,
+    stage_1_preview,
+    stage_2_refine,
     stage_3a_questionnaire,
-    stage_3b_solar,         
+    stage_3b_solar,
     stage_4_report
 )
 from src import rag_bot
@@ -35,27 +36,31 @@ def get_model(path):
 # --- CONFIG ---
 st.set_page_config(page_title="SolarSight AI", layout="wide")
 
-if 'step' not in st.session_state: st.session_state.step = 1
+if 'step' not in st.session_state: st.session_state.step = 0
 if 'data' not in st.session_state: st.session_state.data = {}
 if 'sub_step' not in st.session_state: st.session_state.sub_step = "verify"
+if 'inquiry_id' not in st.session_state: st.session_state.inquiry_id = None
 
 # --- SIDEBAR ---
 lat, lon = ui.render_sidebar()
 
 # --- ROUTER ---
-if st.session_state.step == 1:
+if st.session_state.step == 0:
+    stage_0_start.show()
+
+elif st.session_state.step == 1:
     stage_1_preview.show()
 
 elif st.session_state.step == 2:
     stage_2_refine.show(get_model)
 
-elif st.session_state.step == 3: # Now Step 3a
+elif st.session_state.step == 3:  # Step 3a
     stage_3a_questionnaire.show()
 
-elif st.session_state.step == 4: # Now Step 3b
+elif st.session_state.step == 4:  # Step 3b
     stage_3b_solar.show()
 
-elif st.session_state.step == 5: # Now Step 4
+elif st.session_state.step == 5:  # Step 4
     stage_4_report.show()
 
 # --- PERSISTENT RAG BOT ---
