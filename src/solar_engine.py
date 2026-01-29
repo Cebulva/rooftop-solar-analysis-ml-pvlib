@@ -663,34 +663,37 @@ def generate_panel_grid(sunny_mask, gsd, azimuth, tilt, panel_w=1.76, panel_h=1.
     for row in rotated_rows:
         all_panels_flat.extend(row)
 
-    # Final validation: verify panels are within sunny mask
+    # Final validation: verify entire panel footprint is within sunny mask
     valid_rows = []
     for row in rotated_rows:
         valid_row = []
         for panel in row:
             panel_coords = np.array(panel.exterior.coords[:-1], dtype=np.int32)
-            is_valid = True
 
-            # Check all corners
-            for corner in panel_coords:
-                px, py = int(corner[0]), int(corner[1])
-                if px < 0 or py < 0 or py >= sunny_mask.shape[0] or px >= sunny_mask.shape[1]:
-                    is_valid = False
-                    break
-                if sunny_mask[py, px] == 0:
-                    is_valid = False
-                    break
+            # Get bounding box of panel
+            min_px = int(np.min(panel_coords[:, 0]))
+            max_px = int(np.max(panel_coords[:, 0]))
+            min_py = int(np.min(panel_coords[:, 1]))
+            max_py = int(np.max(panel_coords[:, 1]))
 
-            # Check center point
-            if is_valid:
-                center_x = int(np.mean(panel_coords[:, 0]))
-                center_y = int(np.mean(panel_coords[:, 1]))
-                if (center_x < 0 or center_y < 0 or
-                    center_y >= sunny_mask.shape[0] or center_x >= sunny_mask.shape[1] or
-                    sunny_mask[center_y, center_x] == 0):
-                    is_valid = False
+            # Bounds check
+            if min_px < 0 or min_py < 0 or max_py >= sunny_mask.shape[0] or max_px >= sunny_mask.shape[1]:
+                continue
 
-            if is_valid:
+            # Rasterize panel polygon onto a local mask and compare with sunny mask
+            local_h = max_py - min_py + 1
+            local_w = max_px - min_px + 1
+            local_panel_mask = np.zeros((local_h, local_w), dtype=np.uint8)
+            local_coords = panel_coords - np.array([min_px, min_py])
+            cv2.fillConvexPoly(local_panel_mask, local_coords, 255)
+
+            local_sunny = sunny_mask[min_py:max_py + 1, min_px:max_px + 1]
+
+            panel_pixels = int(np.sum(local_panel_mask > 0))
+            overlap_pixels = int(np.sum((local_panel_mask > 0) & (local_sunny > 0)))
+
+            # Allow at most 2 pixels of rounding error from coordinate conversion
+            if panel_pixels > 0 and (panel_pixels - overlap_pixels) <= 2:
                 valid_row.append(panel)
 
         # CRITICAL FIX: Split rows with gaps into separate contiguous sequences

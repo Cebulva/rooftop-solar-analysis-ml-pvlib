@@ -62,7 +62,7 @@ TYPICAL_MIN_STRING = 8          # Typical minimum for efficiency
 TYPICAL_MAX_STRING = 15         # Typical maximum for efficiency
 
 # Panel Installation Margins
-ROOF_EDGE_MARGIN = 0.30         # Minimum distance from roof edge (meters) - safety margin
+ROOF_EDGE_MARGIN = 0.25         # Minimum distance from roof edge (meters) - safety margin
 PANEL_SPACING = 0.05            # Gap between adjacent panels (meters) - maintenance access
 
 # Panel Orientation Options
