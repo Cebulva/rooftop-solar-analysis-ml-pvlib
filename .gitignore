@@ -11,3 +11,4 @@ app_working_copy.py
 .env.template
 /data/inquiries
 data/dealers.db
+data/inquiries/index.json
