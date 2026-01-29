@@ -10,3 +10,4 @@ app_working_copy.py
 .env
 .env.template
 /data/inquiries
+data/dealers.db
