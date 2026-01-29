@@ -36,16 +36,6 @@ from src.panel_optimization import (
     select_panels_from_grid
 )
 
-# Electrical configuration - Serpentine wiring
-from src.electrical_config import (
-    create_serpentine_wiring,
-    calculate_electrical_specs,
-    create_wiring_schematic,
-    PANEL_VOLTAGE,
-    PANEL_CURRENT,
-    PANEL_POWER
-)
-
 # ==========================================
 # ⚙️ UI CONFIGURATION (Tweak these)
 # ==========================================
@@ -70,11 +60,6 @@ PANEL_SPACING = 0.05            # Gap between adjacent panels (meters) - mainten
 # Landscape: 1.13m wide × 1.76m tall (horizontal strings, wider than tall)
 DEFAULT_PANEL_ORIENTATION = "Portrait"  # "Portrait" or "Landscape"
 
-# Wiring Visualization Parameters
-WIRING_LINE_THICKNESS = 1       # Thickness of connection lines (pixels) - try 1-3
-WIRING_ARROW_SIZE = 6           # Size of direction arrows (pixels) - try 4-10
-WIRING_START_MARKER_SIZE = 6    # Size of start marker circles (pixels) - try 4-10
-WIRING_SHOW_ARROWS = True       # Show direction arrows on connections
 # ==========================================
 
 def update_azimuth():
@@ -274,16 +259,7 @@ def show():
 
     selected_count = len(panels)
 
-    # Create serpentine wiring path
-    wiring_path = create_serpentine_wiring(panels, selected_rows) if panels else []
-
-    # Calculate electrical specifications
-    electrical_specs = calculate_electrical_specs(selected_count)
-
     print(f"   Selected for installation: {selected_count} panels")
-    print(f"   System voltage: {electrical_specs['voltage']:.1f}V")
-    print(f"   System current: {electrical_specs['current']:.1f}A")
-    print(f"   System power: {electrical_specs['power']:.0f}W")
 
     # 5. UI Layout
     col_main, col_R = st.columns([4, 1.5])
@@ -291,7 +267,7 @@ def show():
     with col_main:
         # Show tabs only after shadow tolerance is confirmed
         if shadow_confirmed:
-            viz_tabs = st.tabs(["📍 Roof View", "🔌 Wiring Schematic", "🌤️ Shadow Tolerance"])
+            viz_tabs = st.tabs(["📍 Roof View", "🌤️ Shadow Tolerance"])
 
             # Tab 1: Roof View with panels (no overlay)
             with viz_tabs[0]:
@@ -335,65 +311,9 @@ def show():
 
             st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
 
-        # Wiring schematic tab - only shown after shadow tolerance is confirmed
         if shadow_confirmed:
+            # Tab 2: Shadow Tolerance adjustment with overlay
             with viz_tabs[1]:
-                # Electrical schematic showing serpentine wiring
-                if selected_count > 0 and wiring_path:
-                    schematic = create_wiring_schematic(
-                        panels,
-                        selected_rows,
-                        wiring_path
-                    )
-                    if schematic is not None:
-                        st.image(schematic, use_container_width=True, caption="Serpentine Wiring Schematic")
-
-                        # Add detailed electrical information
-                        st.markdown("### ⚡ Electrical Specifications")
-
-                        # System overview
-                        with st.expander("📊 System Overview", expanded=True):
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("System Voltage", f"{electrical_specs['voltage']:.0f}V")
-                            with col2:
-                                st.metric("System Current", f"{electrical_specs['current']:.0f}A")
-                            with col3:
-                                st.metric("System Power", f"{electrical_specs['power']:.0f}W")
-
-                            st.write(f"**Configuration:** Series (All panels in one string)")
-                            st.write(f"**Wiring Pattern:** Serpentine (S-shape)")
-
-                        # Wiring details
-                        with st.expander("🔌 Wiring Instructions"):
-                            st.write(f"**Total Panels:** {selected_count}")
-                            st.write(f"**Wiring Order:** Panel 1 → Panel {selected_count}")
-                            st.write(f"   {' → '.join([f'P{i+1}' for i in range(selected_count)])}")
-                            st.write("")
-                            st.write("**Physical Rule:** Connect + terminal of Panel N to - terminal of Panel N+1")
-                            st.write("**Pattern:** Serpentine (S-pattern) minimizes wire length")
-                            st.write(f"**Voltage:** {electrical_specs['voltage']:.0f}V (31V × {selected_count})")
-                            st.write(f"**Current:** {electrical_specs['current']:.0f}A (constant in series)")
-
-                        # Safety notes
-                        with st.expander("⚠️ Safety & Installation Notes"):
-                            st.write("**Electrical Safety:**")
-                            st.write("- Maximum DC voltage (NEC): 1000V")
-                            st.write("- Minimum inverter start voltage: 200V")
-                            st.write(f"- Your system: {electrical_specs['voltage']:.0f}V ✓")
-
-                            st.write("\n**Installation Guidelines:**")
-                            st.write("- Series panels must be physically adjacent")
-                            st.write("- Use proper DC-rated connectors (MC4)")
-                            st.write("- Follow serpentine pattern to minimize wire runs")
-                            st.write("- Keep wire gauge appropriate for current rating")
-                    else:
-                        st.info("Configure panels to see electrical schematic")
-                else:
-                    st.info("Configure panels to see electrical schematic")
-
-            # Tab 3: Shadow Tolerance adjustment with overlay
-            with viz_tabs[2]:
                 # Create image with pink overlay and green outline
                 shadow_img = roof_only.copy()
                 if np.any(sun_mask > 0):
@@ -596,12 +516,6 @@ def show():
             system_kwp = (selected_count * 440) / 1000
             st.metric("System Size", f"{system_kwp:.2f} kWp")
 
-            # Electrical configuration display
-            if selected_count > 0:
-                st.caption(f"⚡ Configuration: Series (Single String)")
-                st.caption(f"🔌 Wiring: Serpentine pattern")
-                st.caption(f"⚙️ System: {electrical_specs['voltage']:.0f}V @ {electrical_specs['current']:.0f}A")
-
             # Real-time Irradiance Potential
             st.metric("☀️ Irradiance Potential",
                       f"{current_irradiance:.0f} W/m²",
@@ -643,22 +557,6 @@ def show():
                     pdf_panel_img = overlay_panel_sprite(pdf_panel_img, p, pdf_panel_sprite)
                 st.session_state.data["pdf_panel_image"] = pdf_panel_img
 
-                # Wiring schematic image
-                if panels and wiring_path:
-                    pdf_wiring_img = create_wiring_schematic(panels, selected_rows, wiring_path)
-                    st.session_state.data["pdf_wiring_image"] = pdf_wiring_img
-
-                # Store electrical configuration
-                string_config_data = {
-                    'num_strings': 1,
-                    'config_type': f"{selected_count} panels in series (Serpentine)",
-                    'wiring_type': 'series',
-                    'total_voltage': electrical_specs['voltage'],
-                    'total_current': electrical_specs['current'],
-                    'panels_per_string': [selected_count],
-                    'wiring_path': wiring_path
-                }
-
                 st.session_state.data["solar_results"] = {
                     "total_roof_area_m2": total_area_m2,
                     "usable_roof_area_m2": usable_area_m2,
@@ -666,12 +564,11 @@ def show():
                     "system_kwp": system_kwp,
                     "azimuth": current_azimuth,
                     "tilt_angle": user_tilt,
-                    "panel_orientation": current_orientation,  # NEW: Save orientation
+                    "panel_orientation": current_orientation,
                     "roof_form": st.session_state.data["auto_roof_type"],
                     "irradiance_potential": current_irradiance,
                     "annual_production_kwh": annual_production,
                     "coverage_percentage": coverage_pct,
-                    "string_configuration": string_config_data
                 }
 
                 # Auto-save inquiry (includes images stored earlier)

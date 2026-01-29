@@ -169,7 +169,6 @@ def _serialize_data(data: Dict[str, Any], inquiry_dir: Path) -> Dict[str, Any]:
     image_fields = {
         "full_img": "full_img.png",
         "pdf_panel_image": "panel_image.png",
-        "pdf_wiring_image": "wiring_image.png",
     }
 
     for key, value in data.items():
@@ -258,7 +257,6 @@ def _deserialize_data(metadata: Dict[str, Any], inquiry_dir: Path) -> Dict[str, 
     image_restore = {
         "full_img": "full_img",
         "pdf_panel_image": "pdf_panel_image",
-        "pdf_wiring_image": "pdf_wiring_image",
         "zoom_img": None,  # Handled in 'res' dict
     }
 

@@ -63,7 +63,6 @@ def generate_solar_report_pdf(
     final_analysis: Dict[str, Any],
     location: Dict[str, Any],
     panel_image: Optional[np.ndarray] = None,
-    wiring_image: Optional[np.ndarray] = None,
     monthly_data: Optional[Any] = None,
     inquiry_id: Optional[str] = None,
 ) -> bytes:
@@ -76,7 +75,6 @@ def generate_solar_report_pdf(
         final_analysis: Dictionary from GermanSolarCalculator
         location: Dictionary with lat/lon coordinates
         panel_image: BGR numpy array of panel placement visualization
-        wiring_image: BGR numpy array of wiring schematic
         monthly_data: DataFrame with monthly production data
         inquiry_id: Optional inquiry ID for reference
 
@@ -183,48 +181,22 @@ def generate_solar_report_pdf(
     ], available_width)
     pdf.ln(6)
 
-    # Section 5: Electrical Configuration
-    string_config = solar_results.get('string_configuration', {})
-    if string_config:
-        _add_section_header(pdf, '5. Electrical Configuration', available_width)
-        config_type = str(string_config.get('config_type', 'Series'))
-        # Truncate if too long
-        if len(config_type) > 40:
-            config_type = config_type[:37] + '...'
-        _add_key_value_table(pdf, [
-            ('Configuration', config_type),
-            ('System Voltage', f"{string_config.get('total_voltage', 0):.0f} V"),
-            ('System Current', f"{string_config.get('total_current', 0):.0f} A"),
-            ('Wiring Pattern', 'Serpentine'),
-        ], available_width)
-        pdf.ln(6)
-
-    # Section 6: Panel Placement Image
+    # Section 5: Panel Placement Image
     if panel_image is not None:
         pdf.add_page()
-        _add_section_header(pdf, '6. Panel Placement Visualization', available_width)
+        _add_section_header(pdf, '5. Panel Placement Visualization', available_width)
         pdf.set_font('Helvetica', '', 9)
         pdf.cell(0, 5, 'Solar panels on roof (red arrow = azimuth, white = north)', 0, 1, 'L')
         pdf.ln(2)
         _add_image_from_array(pdf, panel_image, width=160)
         pdf.ln(6)
 
-    # Section 7: Wiring Schematic
-    if wiring_image is not None:
-        pdf.add_page()
-        _add_section_header(pdf, '7. Electrical Wiring Schematic', available_width)
-        pdf.set_font('Helvetica', '', 9)
-        pdf.cell(0, 5, 'Serpentine wiring pattern - panel connections in series', 0, 1, 'L')
-        pdf.ln(2)
-        _add_image_from_array(pdf, wiring_image, width=170)
-        pdf.ln(6)
-
-    # Section 8: Monthly Breakdown (if available)
+    # Section 6: Monthly Breakdown (if available)
     if monthly_data is not None:
         try:
             if len(monthly_data) > 0:
                 pdf.add_page()
-                _add_section_header(pdf, '8. Monthly Production Estimate', available_width)
+                _add_section_header(pdf, '6. Monthly Production Estimate', available_width)
                 _add_monthly_table(pdf, monthly_data)
         except Exception:
             pass  # Skip monthly table if there's an issue

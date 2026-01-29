@@ -379,7 +379,6 @@ def render_final_report(lat, lon):
     with col_btn1:
         # Get images from session state (stored in stage 3b)
         panel_image = st.session_state.data.get("pdf_panel_image")
-        wiring_image = st.session_state.data.get("pdf_wiring_image")
 
         # Get monthly data if available
         monthly_data = data_sorted if data_sorted is not None else None
@@ -391,7 +390,6 @@ def render_final_report(lat, lon):
                 final_analysis=analysis,
                 location={'lat': lat, 'lon': lon},
                 panel_image=panel_image,
-                wiring_image=wiring_image,
                 monthly_data=monthly_data,
                 inquiry_id=st.session_state.get("inquiry_id"),
             )
