@@ -20,7 +20,33 @@ def show():
     col_L, col_center, col_R = st.columns([1, 4, 1.5])
 
     with col_center:
-        st.markdown("Click on the **center of your roof** to select the building.")
+        # Address Search Section
+        st.markdown("**Option 1:** Search by address")
+        col_addr, col_btn = st.columns([3, 1])
+
+        with col_addr:
+            address_input = st.text_input(
+                "Enter Address",
+                placeholder="e.g. Musterweg 123, Berlin",
+                key="address_search",
+                label_visibility="collapsed"
+            )
+
+        with col_btn:
+            if st.button("🔍 Search", use_container_width=True, key="search_address_btn"):
+                if address_input:
+                    with st.spinner("Locating..."):
+                        found = ui.search_address(address_input)
+                        if found:
+                            if st.session_state["selected_pos"]:
+                                st.success(f"📍 Found: {st.session_state.get('found_address', '')[:50]}...")
+                            else:
+                                st.info(f"Found area. Click on map to select exact building.")
+                            st.rerun()
+                        else:
+                            st.error("Address not found. Try a different search.")
+
+        st.markdown("**Option 2:** Click directly on the map to select your building")
 
         # Create map
         m = folium.Map(location=[center_lat, center_lon], zoom_start=19)

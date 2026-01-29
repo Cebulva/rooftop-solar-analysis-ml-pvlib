@@ -24,7 +24,7 @@ DEFAULT_LAT = 52.4985
 DEFAULT_LON = 13.4379
 
 def render_sidebar():
-    """Renders the sidebar with address search and location display."""
+    """Renders the sidebar with inquiry info and navigation."""
 
     # Initialize session state for map
     if "map_center" not in st.session_state:
@@ -38,57 +38,6 @@ def render_sidebar():
         # Show current inquiry ID if active
         if st.session_state.get("inquiry_id"):
             st.info(f"**Inquiry:** {st.session_state.inquiry_id}")
-
-        # Address Search
-        st.subheader("📍 Find Location")
-        address_input = st.text_input(
-            "Enter Address",
-            placeholder="e.g. Musterweg 123, Berlin",
-            key="address_search"
-        )
-
-        if st.button("🔍 Search", use_container_width=True):
-            if address_input:
-                try:
-                    geolocator = Nominatim(user_agent="solarsight_ai_v1")
-                    with st.spinner("Locating..."):
-                        location = geolocator.geocode(address_input, addressdetails=True, timeout=10)
-                        if location:
-                            st.session_state["map_center"] = [location.latitude, location.longitude]
-
-                            # Check if address has house number (complete address)
-                            # If yes, automatically place the pin
-                            address_details = location.raw.get('address', {})
-                            has_house_number = 'house_number' in address_details
-
-                            if has_house_number:
-                                # Complete address - place pin automatically
-                                st.session_state["selected_pos"] = (location.latitude, location.longitude)
-                                st.success(f"📍 Pinned: {location.address[:60]}...")
-                            else:
-                                # Incomplete address - just move map, user can click manually
-                                st.session_state["selected_pos"] = None
-                                st.info(f"Found area: {location.address[:60]}... Click on map to select exact building.")
-                            st.rerun()
-                        else:
-                            st.error("Address not found.")
-                except (GeocoderTimedOut, GeocoderUnavailable) as e:
-                    st.error(f"Geocoding error: {e}")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-
-        st.divider()
-
-        # Display current coordinates
-        if st.session_state["selected_pos"]:
-            lat, lon = st.session_state["selected_pos"]
-            st.metric("Latitude", f"{lat:.6f}")
-            st.metric("Longitude", f"{lon:.6f}")
-        else:
-            lat, lon = st.session_state["map_center"]
-            st.caption("Click on map to select building")
-            st.metric("Center Lat", f"{lat:.6f}")
-            st.metric("Center Lon", f"{lon:.6f}")
 
         st.divider()
 
@@ -107,3 +56,43 @@ def render_sidebar():
             return st.session_state["selected_pos"]
         else:
             return tuple(st.session_state["map_center"])
+
+
+def search_address(address_input: str) -> bool:
+    """
+    Search for an address and update map state.
+    Returns True if location was found, False otherwise.
+    """
+    if not address_input:
+        return False
+
+    try:
+        geolocator = Nominatim(user_agent="solarsight_ai_v1")
+        location = geolocator.geocode(address_input, addressdetails=True, timeout=10)
+
+        if location:
+            st.session_state["map_center"] = [location.latitude, location.longitude]
+
+            # Check if address has house number (complete address)
+            address_details = location.raw.get('address', {})
+            has_house_number = 'house_number' in address_details
+
+            if has_house_number:
+                # Complete address - place pin automatically
+                st.session_state["selected_pos"] = (location.latitude, location.longitude)
+                st.session_state["found_address"] = location.address
+                return True
+            else:
+                # Incomplete address - just move map, user can click manually
+                st.session_state["selected_pos"] = None
+                st.session_state["found_address"] = location.address
+                return True
+        else:
+            return False
+
+    except (GeocoderTimedOut, GeocoderUnavailable) as e:
+        st.error(f"Geocoding error: {e}")
+        return False
+    except Exception as e:
+        st.error(f"Error: {e}")
+        return False
