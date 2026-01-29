@@ -1,14 +1,86 @@
 {
-  "last_id": 1,
+  "last_id": 9,
   "inquiries": {
     "INQ-001": {
       "created": "2026-01-29T10:53:12.293115",
-      "modified": "2026-01-29T10:53:45.528742",
+      "modified": "2026-01-29T14:45:16.920868",
       "address": "",
       "lat": 52.5173294,
       "lon": 13.5536902,
       "current_step": 5,
       "system_kwp": 3.96
+    },
+    "INQ-002": {
+      "created": "2026-01-29T14:42:53.992639",
+      "modified": "2026-01-29T14:42:53.992639",
+      "address": "",
+      "lat": null,
+      "lon": null,
+      "current_step": 1,
+      "system_kwp": null
+    },
+    "INQ-003": {
+      "created": "2026-01-29T14:49:34.817250",
+      "modified": "2026-01-29T14:49:34.817250",
+      "address": "",
+      "lat": null,
+      "lon": null,
+      "current_step": 1,
+      "system_kwp": null
+    },
+    "INQ-004": {
+      "created": "2026-01-29T14:52:10.277394",
+      "modified": "2026-01-29T14:52:10.277394",
+      "address": "",
+      "lat": null,
+      "lon": null,
+      "current_step": 1,
+      "system_kwp": null
+    },
+    "INQ-005": {
+      "created": "2026-01-29T14:52:32.594517",
+      "modified": "2026-01-29T14:54:36.434967",
+      "address": "",
+      "lat": 52.5173294,
+      "lon": 13.5536902,
+      "current_step": 5,
+      "system_kwp": 4.84
+    },
+    "INQ-006": {
+      "created": "2026-01-29T15:00:46.754060",
+      "modified": "2026-01-29T15:02:09.874103",
+      "address": "",
+      "lat": 52.5173294,
+      "lon": 13.5536902,
+      "current_step": 2,
+      "system_kwp": null
+    },
+    "INQ-007": {
+      "created": "2026-01-29T15:02:50.506879",
+      "modified": "2026-01-29T15:03:25.433769",
+      "address": "",
+      "lat": 51.45717410102279,
+      "lon": 13.867232501506807,
+      "current_step": 4,
+      "system_kwp": null
+    },
+    "INQ-008": {
+      "created": "2026-01-29T15:03:58.497992",
+      "modified": "2026-01-29T15:03:58.497992",
+      "address": "",
+      "lat": null,
+      "lon": null,
+      "current_step": 1,
+      "system_kwp": null
+    },
+    "INQ-009": {
+      "created": "2026-01-29T15:04:25.989902",
+      "modified": "2026-01-29T15:10:49.557330",
+      "address": "",
+      "lat": 53.63480417389689,
+      "lon": 10.090947747230532,
+      "current_step": 5,
+      "system_kwp": 2.64
     }
   }
 }
