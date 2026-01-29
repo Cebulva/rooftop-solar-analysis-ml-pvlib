@@ -438,25 +438,15 @@ def calculate_annual_benefit(production, consumption):
 
 
 def reindex_by_month(data):
-    """Reindex dataframe to proper month order instead of alphabetical.
-
-    Streamlit charts sort x-axis alphabetically, so we prefix month names
-    with numbers to force correct chronological order.
-    """
-    if len(data.index) > 0 and data.index[0] in MONTH_ORDER:
-        # Create ordered dataframe by selecting rows in correct month order
-        ordered_months = [m for m in MONTH_ORDER if m in data.index]
-        data = data.loc[ordered_months].copy()
-
-        # Rename index with numeric prefix so alphabetical = chronological
-        # "January" -> "01 Jan", "February" -> "02 Feb", etc.
-        month_abbrev = {
-            'January': '01 Jan', 'February': '02 Feb', 'March': '03 Mar',
-            'April': '04 Apr', 'May': '05 May', 'June': '06 Jun',
-            'July': '07 Jul', 'August': '08 Aug', 'September': '09 Sep',
-            'October': '10 Oct', 'November': '11 Nov', 'December': '12 Dec'
-        }
-        data.index = data.index.map(lambda x: month_abbrev.get(x, x))
+    """Reindex dataframe to proper month order instead of alphabetical."""
+    if data.index.name == 'Month' or (len(data.index) > 0 and data.index[0] in MONTH_ORDER):
+        data = data.copy()
+        # Create a mapping of month to sort order
+        month_order_map = {month: i for i, month in enumerate(MONTH_ORDER)}
+        # Add sort key column, sort, then drop it
+        data['_sort_order'] = data.index.map(lambda x: month_order_map.get(x, 99))
+        data = data.sort_values('_sort_order')
+        data = data.drop('_sort_order', axis=1)
     return data
 
 
