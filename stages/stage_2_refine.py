@@ -46,7 +46,7 @@ def show(get_model):
             "detection_confidence", "detection_debug",
             "shadow_tolerance_confirmed", "sun_threshold",
             "target_panel_count", "current_irradiance",
-            "solar_results", "pdf_panel_image",
+            "solar_results", "pdf_panel_image", "solar_active_view",
         ]
         for key in keys_to_clear:
             st.session_state.data.pop(key, None)

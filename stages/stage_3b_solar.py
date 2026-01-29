@@ -261,16 +261,46 @@ def show():
 
     print(f"   Selected for installation: {selected_count} panels")
 
+    # Pre-compute metrics used by both columns
+    system_kwp = (selected_count * 440) / 1000
+    peak_sun_hours = 4.5  # Average for Central Europe
+    system_efficiency = 0.85  # Account for losses
+    annual_production = system_kwp * peak_sun_hours * 365 * (current_irradiance / 1000) * system_efficiency
+    coverage_pct = (annual_production / annual_kwh * 100) if annual_kwh > 0 else 0
+
+    string_info = f"{selected_count}"
+    if selected_count < MIN_PANELS_PER_STRING:
+        string_info += " ⚠️"
+    elif selected_count > MAX_PANELS_PER_STRING:
+        string_info += " ⚠️"
+
     # 5. UI Layout
     col_main, col_R = st.columns([4, 1.5])
 
-    with col_main:
-        # Show tabs only after shadow tolerance is confirmed
-        if shadow_confirmed:
-            viz_tabs = st.tabs(["📍 Roof View", "🌤️ Shadow Tolerance"])
+    # Track active view for conditional rendering of the right panel
+    active_view = st.session_state.data.get("solar_active_view", "roof_view")
 
-            # Tab 1: Roof View with panels (no overlay)
-            with viz_tabs[0]:
+    with col_main:
+        # Show view selector only after shadow tolerance is confirmed
+        if shadow_confirmed:
+            radio_key = f"solar_view_radio_{st.session_state.data.get('view_reset_counter', 0)}"
+            selected_view = st.radio(
+                "View",
+                ["📍 Roof View", "🌤️ Shadow Tolerance"],
+                index=0 if active_view == "roof_view" else 1,
+                horizontal=True,
+                label_visibility="collapsed",
+                key=radio_key
+            )
+
+            # Update active view in session state
+            new_view = "roof_view" if selected_view == "📍 Roof View" else "shadow_tolerance"
+            if new_view != active_view:
+                st.session_state.data["solar_active_view"] = new_view
+                active_view = new_view
+
+            if active_view == "roof_view":
+                # Roof View with panels
                 display_img = roof_only.copy()
                 display_img = draw_azimuth_arrow(display_img, current_azimuth)
 
@@ -296,25 +326,53 @@ def show():
                 elif contiguity_score > 0 and selected_count <= 10:
                     st.success(f"✓ Optimized panel placement (contiguity score: {contiguity_score})")
 
-        else:
-            # Before confirmation: show shadow tolerance setup view
-            display_img = roof_only.copy()
+                if st.button("Run Simulation And Generate Report ☀️", type="primary", use_container_width=True):
+                    # Validate minimum panel count before generating report
+                    if selected_count < MIN_PANELS_PER_STRING:
+                        st.error(f"Cannot generate report: Minimum {MIN_PANELS_PER_STRING} panels required for series connection.")
+                    else:
+                        # Generate and store images for PDF export
+                        pdf_panel_img = roof_only.copy()
+                        pdf_panel_img = draw_azimuth_arrow(pdf_panel_img, current_azimuth)
+                        if current_orientation == "Landscape":
+                            pdf_panel_w_px = 1.13 / gsd
+                            pdf_panel_h_px = (1.76 * math.cos(math.radians(user_tilt))) / gsd
+                        else:
+                            pdf_panel_w_px = 1.76 / gsd
+                            pdf_panel_h_px = (1.13 * math.cos(math.radians(user_tilt))) / gsd
+                        pdf_panel_sprite = create_solar_panel_sprite(pdf_panel_w_px, pdf_panel_h_px, current_azimuth)
+                        for p in panels:
+                            pdf_panel_img = overlay_panel_sprite(pdf_panel_img, p, pdf_panel_sprite)
+                        st.session_state.data["pdf_panel_image"] = pdf_panel_img
 
-            # Show pink overlay and green outline during setup
-            if np.any(sun_mask > 0):
-                pink_tint = np.zeros_like(display_img)
-                pink_tint[sun_mask > 0] = (255, 20, 147)  # Hot pink in BGR
-                display_img = cv2.addWeighted(display_img, 1.0, pink_tint, 0.3, 0)
+                        st.session_state.data["solar_results"] = {
+                            "total_roof_area_m2": total_area_m2,
+                            "usable_roof_area_m2": usable_area_m2,
+                            "panel_count": selected_count,
+                            "system_kwp": system_kwp,
+                            "azimuth": current_azimuth,
+                            "tilt_angle": user_tilt,
+                            "panel_orientation": current_orientation,
+                            "roof_form": st.session_state.data["auto_roof_type"],
+                            "irradiance_potential": current_irradiance,
+                            "annual_production_kwh": annual_production,
+                            "coverage_percentage": coverage_pct,
+                        }
 
-                contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-                cv2.drawContours(display_img, contours, -1, (0, 255, 0), 1)  # Green contour, 1px thick
+                        # Auto-save inquiry (includes images stored earlier)
+                        if st.session_state.get("inquiry_id"):
+                            save_inquiry(
+                                st.session_state.inquiry_id,
+                                st.session_state.data,
+                                step=5,
+                                sub_step="verify"
+                            )
 
-            st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
+                        st.session_state.step = 5
+                        st.rerun()
 
-        if shadow_confirmed:
-            # Tab 2: Shadow Tolerance adjustment with overlay
-            with viz_tabs[1]:
-                # Create image with pink overlay and green outline
+            else:
+                # Shadow Tolerance adjustment with overlay
                 shadow_img = roof_only.copy()
                 if np.any(sun_mask > 0):
                     pink_tint = np.zeros_like(shadow_img)
@@ -322,7 +380,7 @@ def show():
                     shadow_img = cv2.addWeighted(shadow_img, 1.0, pink_tint, 0.3, 0)
 
                     contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-                    cv2.drawContours(shadow_img, contours, -1, (0, 255, 0), 1)  # Green contour, 1px thick
+                    cv2.drawContours(shadow_img, contours, -1, (0, 255, 0), 1)
 
                 st.image(shadow_img, use_container_width=True, caption="Usable area overlay")
 
@@ -335,8 +393,29 @@ def show():
                 )
                 st.caption("Use negative values to select only the brightest roof sections. The pink overlay shows usable area.")
 
+                if st.button("Confirm Shadow Tolerance", type="primary", use_container_width=True):
+                    st.session_state.data["solar_active_view"] = "roof_view"
+                    st.session_state.data["view_reset_counter"] = st.session_state.data.get("view_reset_counter", 0) + 1
+                    st.session_state.data.pop("target_panel_count", None)
+                    st.rerun()
+
+        else:
+            # Before confirmation: show shadow tolerance setup view
+            display_img = roof_only.copy()
+
+            # Show pink overlay and green outline during setup
+            if np.any(sun_mask > 0):
+                pink_tint = np.zeros_like(display_img)
+                pink_tint[sun_mask > 0] = (255, 20, 147)  # Hot pink in BGR
+                display_img = cv2.addWeighted(display_img, 1.0, pink_tint, 0.3, 0)
+
+                contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+                cv2.drawContours(display_img, contours, -1, (0, 255, 0), 1)
+
+            st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
+
         if not shadow_confirmed:
-            # Step 1: Shadow Tolerance - shown prominently when not yet confirmed
+            # Shadow Tolerance setup - shown prominently when not yet confirmed
             st.markdown("### 🌤️ Shadow Tolerance")
             st.caption("Adjust this slider to define which areas of your roof are usable for solar panels. "
                        "Use negative values to select only the brightest sections.")
@@ -353,232 +432,162 @@ def show():
             if st.button("Confirm Shadow Tolerance", type="primary", use_container_width=True):
                 st.session_state.data["shadow_tolerance_confirmed"] = True
                 st.rerun()
-        else:
-            # Step 2: Advanced Options - shown first after shadow tolerance is confirmed
-            with st.expander("🛠️ Advanced Options", expanded=True):
-                # Panel Count Slider
-                max_capacity = len(all_panels_flat)
-
-                # Enforce minimum panel count
-                min_installable = max(MIN_PANELS_PER_STRING, 1)
-
-                # Show warning if roof capacity is below minimum requirement
-                if max_capacity < MIN_PANELS_PER_STRING:
-                    st.error(f"⚠️ Roof capacity ({max_capacity} panels) is below the minimum requirement "
-                            f"({MIN_PANELS_PER_STRING} panels in series). Installation not viable with current settings.")
-                elif max_capacity < TYPICAL_MIN_STRING:
-                    st.warning(f"⚠️ Roof capacity ({max_capacity} panels) is below typical minimum "
-                              f"({TYPICAL_MIN_STRING} panels). Consider adjusting settings or using micro-inverters.")
-
-                # Determine default target count (capped by string limits)
-                slider_max = min(max_capacity, MAX_PANELS_PER_STRING)
-                default_target = min(
-                    st.session_state.data.get("target_panel_count", recommended_limit),
-                    slider_max
-                )
-
-                # Ensure default meets minimum requirement
-                default_target = max(default_target, min_installable)
-
-                # Handle edge case where min equals max (slider requires min < max)
-                if slider_max <= min_installable:
-                    # Can't show a slider, just display the fixed value
-                    current_count = max(slider_max, 1)
-                    st.metric("Number of Panels", f"{current_count}")
-                    st.caption(f"Limited capacity: only {current_count} panel(s) fit on usable area.")
-                    st.session_state.data["target_panel_count"] = current_count
-                else:
-                    current_count = st.slider(
-                        "Number of Panels to Install",
-                        min_value=min_installable,
-                        max_value=slider_max,
-                        value=int(default_target),
-                        key="panel_slider_widget",
-                        help=(f"String limits: Min {MIN_PANELS_PER_STRING}, Max {MAX_PANELS_PER_STRING}. "
-                              f"Typical: {TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING} panels per string. "
-                              f"Questionnaire recommended: {recommended_limit}. "
-                              f"Only contiguous panel groups shown."),
-                        on_change=lambda: st.session_state.data.update({
-                            "target_panel_count": st.session_state.panel_slider_widget
-                        })
-                    )
-
-                # Visual feedback on string configuration
-                if current_count < TYPICAL_MIN_STRING:
-                    st.caption(f"⚠️ Below typical minimum ({TYPICAL_MIN_STRING}). May require special inverter configuration.")
-                elif current_count > TYPICAL_MAX_STRING:
-                    st.caption(f"ℹ️ Above typical maximum ({TYPICAL_MAX_STRING}). May require multiple strings.")
-                else:
-                    st.caption(f"✅ Within typical range ({TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING} panels).")
-
-                # Solar Orientation - directly after panel count
-                st.slider("Solar Orientation (Azimuth °)", 0, 359, int(current_azimuth),
-                          key="az_slider_widget", on_change=update_azimuth,
-                          help="Watch the Irradiance Potential change as you rotate!")
-
-                c1, c2 = st.columns(2)
-                selected_type = c1.selectbox("Roof Form", ["Pitched", "Flat"],
-                                           index=0 if st.session_state.data["auto_roof_type"] == "Pitched" else 1)
-
-                # Panel Orientation Toggle
-                selected_orientation = c2.selectbox(
-                    "Panel Orientation",
-                    ["Portrait", "Landscape"],
-                    index=0 if current_orientation == "Portrait" else 1,
-                    help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
-                )
-
-                # Update orientation if changed
-                if selected_orientation != st.session_state.data.get("panel_orientation"):
-                    st.session_state.data["panel_orientation"] = selected_orientation
-                    st.rerun()
-
-                # Show detection confidence and reasoning if enabled
-                if SHOW_DEBUG_INFO and "detection_debug" in st.session_state.data:
-                    debug = st.session_state.data["detection_debug"]
-                    confidence = st.session_state.data.get("detection_confidence", 0)
-                    detected_type = st.session_state.data.get("detected_roof_type", "Unknown")
-                    manually_set = st.session_state.data.get("roof_type_manually_set", False)
-
-                    # Show detection info in expander instead of column
-                    with st.expander("🔍 Detection Details", expanded=False):
-                        col_det1, col_det2 = st.columns(2)
-                        with col_det1:
-                            st.metric("Detected Type", detected_type)
-                        with col_det2:
-                            st.metric("Confidence", f"{confidence:.0%}")
-
-                        # Show if user has overridden detection
-                        if manually_set and selected_type != detected_type:
-                            st.info(f"You selected **{selected_type}** (detection suggests {detected_type})")
-                            if st.button("Reset to Auto-Detection", key="reset_roof_type"):
-                                st.session_state.data["auto_roof_type"] = detected_type
-                                st.session_state.data["roof_type_manually_set"] = False
-                                st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
-                                recalculate_irradiance()
-                                st.rerun()
-
-                        st.write(f"**Reasoning:** {debug.get('reason', 'N/A')}")
-                        st.write(f"**Coverage Ratio:** {debug.get('coverage_ratio', 0):.1%} "
-                                f"(Flat if ≥ {MIN_FLAT_ROOF_COVERAGE:.0%})")
-                        st.write(f"**Brightness Range:** {debug.get('brightness_range', 0):.0f}/255 "
-                                f"(Pitched if ≥ 30)")
-                        st.write(f"**Texture Variance:** {debug.get('std_dev', 0):.1f} "
-                                f"(Pitched if > 15)")
-
-                # Re-run if type changes to update tilt
-                if selected_type != st.session_state.data["auto_roof_type"]:
-                    st.session_state.data["auto_roof_type"] = selected_type
-                    st.session_state.data["roof_type_manually_set"] = True  # User manually changed roof type
-                    # Set appropriate default tilt for the roof type
-                    st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if selected_type == "Pitched" else DEFAULT_FLAT_TILT
-                    recalculate_irradiance()
-                    st.rerun()
-
-                # Tilt Angle Slider - visible for PITCHED roofs
-                if selected_type == "Pitched":
-                    st.slider(
-                        "Panel Tilt Angle (°)",
-                        min_value=10,
-                        max_value=60,
-                        value=int(st.session_state.data["user_tilt"]),
-                        key="tilt_slider_widget",
-                        help=f"Typical range: 25-45°. Default: {DEFAULT_PITCHED_TILT}°",
-                        on_change=lambda: st.session_state.data.update({
-                            "user_tilt": float(st.session_state.tilt_slider_widget)
-                        }) or recalculate_irradiance()
-                    )
-                else:
-                    # For flat roofs, show info but don't allow adjustment (optimal mounting angle)
-                    st.info(f"ℹ️ Flat roof panels use {DEFAULT_FLAT_TILT}° mounting angle for optimal drainage and performance.")
 
     with col_R:
-        st.markdown("### 📊 Roof Metrics")
-        st.metric("Total Roof Area", f"{total_area_m2:.1f} m²")
-        st.metric("Usable Space", f"{usable_area_m2:.1f} m²")
+        if not shadow_confirmed:
+            st.markdown("### 📊 Roof Metrics")
+            st.metric("Total Roof Area", f"{total_area_m2:.1f} m²")
+            st.metric("Usable Space", f"{usable_area_m2:.1f} m²")
+        elif active_view == "shadow_tolerance":
+            st.markdown("### 📊 Roof Metrics")
+            st.metric("Total Roof Area", f"{total_area_m2:.1f} m²")
+            st.metric("Usable Space", f"{usable_area_m2:.1f} m²")
+        else:
+            st.markdown("### Panel Configuration")
+            max_capacity = len(all_panels_flat)
+            min_installable = max(MIN_PANELS_PER_STRING, 1)
 
-        # Only show panel-related metrics after shadow tolerance is confirmed
-        if shadow_confirmed:
+            # Panel count warnings
+            if max_capacity < MIN_PANELS_PER_STRING:
+                st.error(f"⚠️ Roof capacity ({max_capacity} panels) is below the minimum requirement "
+                        f"({MIN_PANELS_PER_STRING} panels in series). Installation not viable with current settings.")
+            elif max_capacity < TYPICAL_MIN_STRING:
+                st.warning(f"⚠️ Roof capacity ({max_capacity} panels) is below typical minimum "
+                          f"({TYPICAL_MIN_STRING} panels). Consider adjusting settings or using micro-inverters.")
+
+            # Panel Count Slider
+            slider_max = min(max_capacity, MAX_PANELS_PER_STRING)
+            default_target = min(
+                st.session_state.data.get("target_panel_count", recommended_limit),
+                slider_max
+            )
+            default_target = max(default_target, min_installable)
+
+            if slider_max <= min_installable:
+                current_count = max(slider_max, 1)
+                st.metric("Number of Panels", f"{current_count}")
+                st.caption(f"Limited capacity: only {current_count} panel(s) fit on usable area.")
+                st.session_state.data["target_panel_count"] = current_count
+            else:
+                current_count = st.slider(
+                    "Number of Panels to Install",
+                    min_value=min_installable,
+                    max_value=slider_max,
+                    value=int(default_target),
+                    key="panel_slider_widget",
+                    help=(f"String limits: Min {MIN_PANELS_PER_STRING}, Max {MAX_PANELS_PER_STRING}. "
+                          f"Typical: {TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING} panels per string. "
+                          f"Questionnaire recommended: {recommended_limit}. "
+                          f"Only contiguous panel groups shown."),
+                    on_change=lambda: st.session_state.data.update({
+                        "target_panel_count": st.session_state.panel_slider_widget
+                    })
+                )
+
+            # Visual feedback on string configuration
+            if current_count < TYPICAL_MIN_STRING:
+                st.caption(f"⚠️ Below typical minimum ({TYPICAL_MIN_STRING}). May require special inverter configuration.")
+            elif current_count > TYPICAL_MAX_STRING:
+                st.caption(f"ℹ️ Above typical maximum ({TYPICAL_MAX_STRING}). May require multiple strings.")
+            else:
+                st.caption(f"✅ Within typical range ({TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING} panels).")
+
+            # Azimuth slider
+            st.slider("Solar Orientation (Azimuth °)", 0, 359, int(current_azimuth),
+                      key="az_slider_widget", on_change=update_azimuth,
+                      help="Watch the Irradiance Potential change as you rotate!")
+
+            # Detection Details - closed expander above Roof Form
+            if SHOW_DEBUG_INFO and "detection_debug" in st.session_state.data:
+                debug = st.session_state.data["detection_debug"]
+                confidence = st.session_state.data.get("detection_confidence", 0)
+                detected_type = st.session_state.data.get("detected_roof_type", "Unknown")
+                manually_set = st.session_state.data.get("roof_type_manually_set", False)
+
+                with st.expander("🔍 Detection Details", expanded=False):
+                    col_det1, col_det2 = st.columns(2)
+                    with col_det1:
+                        st.metric("Detected Type", detected_type)
+                    with col_det2:
+                        st.metric("Confidence", f"{confidence:.0%}")
+
+                    if manually_set and selected_type != detected_type:
+                        st.info(f"You selected **{selected_type}** (detection suggests {detected_type})")
+                        if st.button("Reset to Auto-Detection", key="reset_roof_type"):
+                            st.session_state.data["auto_roof_type"] = detected_type
+                            st.session_state.data["roof_type_manually_set"] = False
+                            st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
+                            recalculate_irradiance()
+                            st.rerun()
+
+                    st.write(f"**Reasoning:** {debug.get('reason', 'N/A')}")
+                    st.write(f"**Coverage Ratio:** {debug.get('coverage_ratio', 0):.1%} "
+                            f"(Flat if ≥ {MIN_FLAT_ROOF_COVERAGE:.0%})")
+                    st.write(f"**Brightness Range:** {debug.get('brightness_range', 0):.0f}/255 "
+                            f"(Pitched if ≥ 30)")
+                    st.write(f"**Texture Variance:** {debug.get('std_dev', 0):.1f} "
+                            f"(Pitched if > 15)")
+
+            # Roof Form - full width, stacked
+            selected_type = st.selectbox("Roof Form", ["Pitched", "Flat"],
+                                        index=0 if st.session_state.data["auto_roof_type"] == "Pitched" else 1)
+
+            # Panel Orientation - full width, stacked below Roof Form
+            selected_orientation = st.selectbox(
+                "Panel Orientation",
+                ["Portrait", "Landscape"],
+                index=0 if current_orientation == "Portrait" else 1,
+                help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
+            )
+
+            # Update orientation if changed
+            if selected_orientation != st.session_state.data.get("panel_orientation"):
+                st.session_state.data["panel_orientation"] = selected_orientation
+                st.rerun()
+
+            # Re-run if roof type changes to update tilt
+            if selected_type != st.session_state.data["auto_roof_type"]:
+                st.session_state.data["auto_roof_type"] = selected_type
+                st.session_state.data["roof_type_manually_set"] = True
+                st.session_state.data["user_tilt"] = DEFAULT_PITCHED_TILT if selected_type == "Pitched" else DEFAULT_FLAT_TILT
+                recalculate_irradiance()
+                st.rerun()
+
+            # Tilt Angle Slider - visible for PITCHED roofs
+            if selected_type == "Pitched":
+                st.slider(
+                    "Panel Tilt Angle (°)",
+                    min_value=10,
+                    max_value=60,
+                    value=int(st.session_state.data["user_tilt"]),
+                    key="tilt_slider_widget",
+                    help=f"Typical range: 25-45°. Default: {DEFAULT_PITCHED_TILT}°",
+                    on_change=lambda: st.session_state.data.update({
+                        "user_tilt": float(st.session_state.tilt_slider_widget)
+                    }) or recalculate_irradiance()
+                )
+            else:
+                st.info(f"ℹ️ Flat roof: {DEFAULT_FLAT_TILT}° mounting angle for optimal drainage and performance.")
+
+            # System Metrics
             st.markdown("---")
             st.markdown("### ⚡ System Metrics")
-
-            # String Configuration Display
-            string_info = f"{selected_count}"
-            if selected_count < MIN_PANELS_PER_STRING:
-                string_info += " ⚠️"
-            elif selected_count > MAX_PANELS_PER_STRING:
-                string_info += " ⚠️"
-
             st.metric("Selected Panels", string_info,
                      help=f"String limits: {MIN_PANELS_PER_STRING}-{MAX_PANELS_PER_STRING} panels. "
                           f"Typical: {TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING}")
-
-            system_kwp = (selected_count * 440) / 1000
             st.metric("System Size", f"{system_kwp:.2f} kWp")
-
-            # Real-time Irradiance Potential
-            st.metric("☀️ Irradiance Potential",
+            st.metric("☀️ Irradiance",
                       f"{current_irradiance:.0f} W/m²",
                       help="Real-time solar irradiance at current azimuth. Rotate to see changes!")
-
-            # Calculate annual energy production estimate
-            # Simplified calculation: kWp × irradiance × hours × efficiency
-            peak_sun_hours = 4.5  # Average for Central Europe
-            system_efficiency = 0.85  # Account for losses
-            annual_production = system_kwp * peak_sun_hours * 365 * (current_irradiance / 1000) * system_efficiency
-
-            st.metric("Est. Annual Production",
-                      f"{annual_production:,.0f} kWh/year",
+            st.metric("Est. Production",
+                      f"{annual_production:,.0f} kWh/yr",
                       help="Estimated yearly energy production")
-
-            # Coverage percentage
-            coverage_pct = (annual_production / annual_kwh * 100) if annual_kwh > 0 else 0
             st.metric("Coverage",
                       f"{coverage_pct:.0f}%",
                       help="Percentage of your consumption covered by solar")
 
-        if shadow_confirmed and st.button("Run Simulation And Generate Report ☀️", type="primary", use_container_width=True):
-            # Validate minimum panel count before generating report
-            if selected_count < MIN_PANELS_PER_STRING:
-                st.error(f"Cannot generate report: Minimum {MIN_PANELS_PER_STRING} panels required for series connection.")
-            else:
-                # Generate and store images for PDF export
-                # Panel placement image
-                pdf_panel_img = roof_only.copy()
-                pdf_panel_img = draw_azimuth_arrow(pdf_panel_img, current_azimuth)
-                if current_orientation == "Landscape":
-                    pdf_panel_w_px = 1.13 / gsd
-                    pdf_panel_h_px = (1.76 * math.cos(math.radians(user_tilt))) / gsd
-                else:
-                    pdf_panel_w_px = 1.76 / gsd
-                    pdf_panel_h_px = (1.13 * math.cos(math.radians(user_tilt))) / gsd
-                pdf_panel_sprite = create_solar_panel_sprite(pdf_panel_w_px, pdf_panel_h_px, current_azimuth)
-                for p in panels:
-                    pdf_panel_img = overlay_panel_sprite(pdf_panel_img, p, pdf_panel_sprite)
-                st.session_state.data["pdf_panel_image"] = pdf_panel_img
-
-                st.session_state.data["solar_results"] = {
-                    "total_roof_area_m2": total_area_m2,
-                    "usable_roof_area_m2": usable_area_m2,
-                    "panel_count": selected_count,
-                    "system_kwp": system_kwp,
-                    "azimuth": current_azimuth,
-                    "tilt_angle": user_tilt,
-                    "panel_orientation": current_orientation,
-                    "roof_form": st.session_state.data["auto_roof_type"],
-                    "irradiance_potential": current_irradiance,
-                    "annual_production_kwh": annual_production,
-                    "coverage_percentage": coverage_pct,
-                }
-
-                # Auto-save inquiry (includes images stored earlier)
-                if st.session_state.get("inquiry_id"):
-                    save_inquiry(
-                        st.session_state.inquiry_id,
-                        st.session_state.data,
-                        step=5,
-                        sub_step="verify"
-                    )
-
-                st.session_state.step = 5
-                st.rerun()
+            # Roof Metrics
+            st.markdown("---")
+            st.markdown("### 📊 Roof Metrics")
+            st.metric("Total Roof Area", f"{total_area_m2:.1f} m²")
+            st.metric("Usable Space", f"{usable_area_m2:.1f} m²")
