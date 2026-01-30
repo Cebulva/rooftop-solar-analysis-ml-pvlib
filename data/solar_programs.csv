@@ -1,0 +1,19 @@
+Type,State,Program,Subsidy,Max Size/Bonus,Link,ProgramType
+Federal,All,EEG Feed-in Tariff,"19.5 ct/kWh","100 kWp +1 ct/kWh",www.bundesnetzagentur.de,Incentive
+Federal,All,"KfW 270 – Renewable Energy Standard","Loan up to 100% costs","20 years",www.kfw.de,Loan
+State,Baden-Württemberg,PV Subsidy BW,"€500/kWp","+€200 storage",www.l-bank.de,Subsidy
+State,Bavaria,PV Bayern,"€400/kWp","NA",www.stmwi.bayern.de,Subsidy
+State,Berlin,SolarPlus,"€400/kWp","10 kWp",www.berlin.de/solarplus,Subsidy
+State,Brandenburg,PV Brandenburg,"€350/kWp","NA",www.mwae.brandenburg.de,Subsidy
+State,Bremen,PV Bremen,"€300/kWp","30% system cost",www.bremen.de/solarfoerderung,Subsidy
+State,Hamburg,Solarförderung HH,"30% system cost","max €3,000",www.hamburg.de/solarfoerderung,Subsidy
+State,Hesse,PV Hessen,"€400/kWp","NA",www.hessen.de/solarfoerderung,Subsidy
+State,Lower Saxony,PV Niedersachsen,"€350/kWp","NA",www.niedersachsen.de/solarfoerderung,Subsidy
+State,Mecklenburg-Vorpommern,PV MV,"€300/kWp","NA",www.mv-regierung.de/solar,Subsidy
+State,North Rhine-Westphalia,PV NRW,"€450/kWp","NA",www.land.nrw/solarfoerderung,Subsidy
+State,Rhineland-Palatinate,PV RLP,"€400/kWp","NA",www.rlp.de/solarfoerderung,Subsidy
+State,Saarland,PV Saar,"€350/kWp","NA",www.saarland.de/solar,Subsidy
+State,Saxony,PV Sachsen,"€500/kWp","NA",www.sachsen.de/solarfoerderung,Subsidy
+State,Saxony-Anhalt,PV Sachsen-Anhalt,"€300/kWp","NA",www.sachsen-anhalt.de/solar,Subsidy
+State,Schleswig-Holstein,PV SH,"€350/kWp","NA",www.schleswig-holstein.de/solar,Subsidy
+State,Thuringia,PV Thüringen,"€300/kWp","NA",www.thueringen.de/solar,Subsidy
