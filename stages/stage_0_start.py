@@ -13,7 +13,7 @@ from src.inquiry_manager import (
 def show():
     """Display the start screen for inquiry selection."""
 
-    st.title("Welcome to SolarSight AI")
+    st.title("Welcome to SolarSight")
     st.markdown("**Rooftop Solar Analysis Tool**")
     st.divider()
 

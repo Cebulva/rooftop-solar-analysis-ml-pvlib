@@ -192,9 +192,6 @@ def generate_solar_report_pdf(
             ('Cars Off Road', f"{env_metrics.get('cars_equivalent', 0):.1f} cars/year"),
             ('Coal Saved (Annual)', f"{env_metrics.get('coal_avoided_kg', 0):,.0f} kg"),
         ], available_width)
-        pdf.ln(3)
-        pdf.set_font('Helvetica', 'I', 9)
-        pdf.cell(0, 5, f"25-Year Impact: {env_metrics.get('lifetime_co2_tonnes', 0):.1f} tonnes CO2 avoided", 0, 1, 'L')
         pdf.ln(6)
 
     # Section 6: Panel Placement Image
