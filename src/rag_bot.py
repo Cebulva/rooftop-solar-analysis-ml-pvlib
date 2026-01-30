@@ -518,9 +518,9 @@ def render_chat_interface():
         # --- Single follow-up button below messages ---
         # Show button - use LLM suggestion or fallback to "More details"
         follow_up_text = state.get("next_question") or "More details"
-        
-        button_key = f"followup_{abs(hash(follow_up_text))}"
-        if st.button(f"➡️ {follow_up_text}", key=button_key, width="stretch"):
+
+        # Use a simple static key - only one follow-up button exists at a time
+        if st.button(f"➡️ {follow_up_text}", key="rag_followup_btn", use_container_width=True):
             question_to_send = follow_up_text
             state["next_question"] = None  # Clear for next time
             handle_message(question_to_send)
@@ -626,7 +626,3 @@ def handle_message(prompt):
     except Exception as e:
         state["messages"].append({"role": "assistant", "content": f"Error: {str(e)[:150]}..."})
         state["next_question"] = None
-
-# Initialize chat on load
-initialize_chat()
-render_chat_interface()

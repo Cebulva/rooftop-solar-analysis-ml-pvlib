@@ -65,6 +65,7 @@ def generate_solar_report_pdf(
     panel_image: Optional[np.ndarray] = None,
     monthly_data: Optional[Any] = None,
     inquiry_id: Optional[str] = None,
+    env_metrics: Optional[Dict[str, float]] = None,
 ) -> bytes:
     """
     Generate a complete PDF report for solar panel analysis.
@@ -77,6 +78,7 @@ def generate_solar_report_pdf(
         panel_image: BGR numpy array of panel placement visualization
         monthly_data: DataFrame with monthly production data
         inquiry_id: Optional inquiry ID for reference
+        env_metrics: Optional environmental impact metrics (CO2, trees, etc.)
 
     Returns:
         PDF file as bytes
@@ -181,22 +183,33 @@ def generate_solar_report_pdf(
     ], available_width)
     pdf.ln(6)
 
-    # Section 5: Panel Placement Image
+    # Section 5: Environmental Impact
+    if env_metrics:
+        _add_section_header(pdf, '5. Environmental Impact', available_width)
+        _add_key_value_table(pdf, [
+            ('CO2 Avoided (Annual)', f"{env_metrics.get('co2_avoided_tonnes', 0):.1f} tonnes"),
+            ('Trees Equivalent', f"{env_metrics.get('trees_equivalent', 0):.0f} trees"),
+            ('Cars Off Road', f"{env_metrics.get('cars_equivalent', 0):.1f} cars/year"),
+            ('Coal Saved (Annual)', f"{env_metrics.get('coal_avoided_kg', 0):,.0f} kg"),
+        ], available_width)
+        pdf.ln(6)
+
+    # Section 6: Panel Placement Image
     if panel_image is not None:
         pdf.add_page()
-        _add_section_header(pdf, '5. Panel Placement Visualization', available_width)
+        _add_section_header(pdf, '6. Panel Placement Visualization', available_width)
         pdf.set_font('Helvetica', '', 9)
         pdf.cell(0, 5, 'Solar panels on roof (red arrow = azimuth, white = north)', 0, 1, 'L')
         pdf.ln(2)
         _add_image_from_array(pdf, panel_image, width=160)
         pdf.ln(6)
 
-    # Section 6: Monthly Breakdown (if available)
+    # Section 7: Monthly Breakdown (if available)
     if monthly_data is not None:
         try:
             if len(monthly_data) > 0:
                 pdf.add_page()
-                _add_section_header(pdf, '6. Monthly Production Estimate', available_width)
+                _add_section_header(pdf, '7. Monthly Production Estimate', available_width)
                 _add_monthly_table(pdf, monthly_data)
         except Exception:
             pass  # Skip monthly table if there's an issue

@@ -318,7 +318,26 @@ def show():
                 for p in panels:
                     display_img = overlay_panel_sprite(display_img, p, panel_sprite)
 
-                st.image(display_img, use_container_width=True, caption="Panel placement on roof")
+                # System metrics as native Streamlit widgets (sharp at any resolution)
+                # Weight columns by value width so spacing is even
+                _vals = [
+                    str(selected_count),
+                    f"{system_kwp:.2f} kWp",
+                    f"{current_irradiance:.0f} W/m\u00b2",
+                    f"{annual_production:,.0f} kWh/yr",
+                    f"{coverage_pct:.0f}%",
+                ]
+                _labels = ["Panels", "System", "Irradiance", "Production", "Coverage"]
+                _weights = [max(len(l), len(v)) for l, v in zip(_labels, _vals)]
+                with st.container(border=True):
+                    m1, m2, m3, m4, m5 = st.columns(_weights)
+                    m1.metric(_labels[0], _vals[0])
+                    m2.metric(_labels[1], _vals[1])
+                    m3.metric(_labels[2], _vals[2])
+                    m4.metric(_labels[3], _vals[3])
+                    m5.metric(_labels[4], _vals[4])
+
+                st.image(display_img, width="stretch", caption="Panel placement on roof")
 
                 # Show placement optimization status
                 if grid_warning:
@@ -382,7 +401,7 @@ def show():
                     contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(shadow_img, contours, -1, (0, 255, 0), 1)
 
-                st.image(shadow_img, use_container_width=True, caption="Usable area overlay")
+                st.image(shadow_img, width="stretch", caption="Usable area overlay")
 
                 st.slider(
                     "Shadow Tolerance",
@@ -412,7 +431,7 @@ def show():
                 contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 cv2.drawContours(display_img, contours, -1, (0, 255, 0), 1)
 
-            st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
+            st.image(display_img, width="stretch", caption="Adjust shadow tolerance to define usable area")
 
         if not shadow_confirmed:
             # Shadow Tolerance setup - shown prominently when not yet confirmed
@@ -497,7 +516,20 @@ def show():
                       key="az_slider_widget", on_change=update_azimuth,
                       help="Watch the Irradiance Potential change as you rotate!")
 
-            # Detection Details - closed expander above Roof Form
+            # Panel Orientation
+            selected_orientation = st.selectbox(
+                "Panel Orientation",
+                ["Portrait", "Landscape"],
+                index=0 if current_orientation == "Portrait" else 1,
+                help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
+            )
+
+            # Update orientation if changed
+            if selected_orientation != st.session_state.data.get("panel_orientation"):
+                st.session_state.data["panel_orientation"] = selected_orientation
+                st.rerun()
+
+            # Detection Details
             if SHOW_DEBUG_INFO and "detection_debug" in st.session_state.data:
                 debug = st.session_state.data["detection_debug"]
                 confidence = st.session_state.data.get("detection_confidence", 0)
@@ -511,8 +543,9 @@ def show():
                     with col_det2:
                         st.metric("Confidence", f"{confidence:.0%}")
 
-                    if manually_set and selected_type != detected_type:
-                        st.info(f"You selected **{selected_type}** (detection suggests {detected_type})")
+                    current_roof_type = st.session_state.data.get("auto_roof_type", "Pitched")
+                    if manually_set and current_roof_type != detected_type:
+                        st.info(f"You selected **{current_roof_type}** (detection suggests {detected_type})")
                         if st.button("Reset to Auto-Detection", key="reset_roof_type"):
                             st.session_state.data["auto_roof_type"] = detected_type
                             st.session_state.data["roof_type_manually_set"] = False
@@ -528,22 +561,9 @@ def show():
                     st.write(f"**Texture Variance:** {debug.get('std_dev', 0):.1f} "
                             f"(Pitched if > 15)")
 
-            # Roof Form - full width, stacked
+            # Roof Form
             selected_type = st.selectbox("Roof Form", ["Pitched", "Flat"],
                                         index=0 if st.session_state.data["auto_roof_type"] == "Pitched" else 1)
-
-            # Panel Orientation - full width, stacked below Roof Form
-            selected_orientation = st.selectbox(
-                "Panel Orientation",
-                ["Portrait", "Landscape"],
-                index=0 if current_orientation == "Portrait" else 1,
-                help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
-            )
-
-            # Update orientation if changed
-            if selected_orientation != st.session_state.data.get("panel_orientation"):
-                st.session_state.data["panel_orientation"] = selected_orientation
-                st.rerun()
 
             # Re-run if roof type changes to update tilt
             if selected_type != st.session_state.data["auto_roof_type"]:
@@ -556,7 +576,7 @@ def show():
             # Tilt Angle Slider - visible for PITCHED roofs
             if selected_type == "Pitched":
                 st.slider(
-                    "Panel Tilt Angle (°)",
+                    "Tilt Angle (°)",
                     min_value=10,
                     max_value=60,
                     value=int(st.session_state.data["user_tilt"]),
@@ -568,23 +588,6 @@ def show():
                 )
             else:
                 st.info(f"ℹ️ Flat roof: {DEFAULT_FLAT_TILT}° mounting angle for optimal drainage and performance.")
-
-            # System Metrics
-            st.markdown("---")
-            st.markdown("### ⚡ System Metrics")
-            st.metric("Selected Panels", string_info,
-                     help=f"String limits: {MIN_PANELS_PER_STRING}-{MAX_PANELS_PER_STRING} panels. "
-                          f"Typical: {TYPICAL_MIN_STRING}-{TYPICAL_MAX_STRING}")
-            st.metric("System Size", f"{system_kwp:.2f} kWp")
-            st.metric("☀️ Irradiance",
-                      f"{current_irradiance:.0f} W/m²",
-                      help="Real-time solar irradiance at current azimuth. Rotate to see changes!")
-            st.metric("Est. Production",
-                      f"{annual_production:,.0f} kWh/yr",
-                      help="Estimated yearly energy production")
-            st.metric("Coverage",
-                      f"{coverage_pct:.0f}%",
-                      help="Percentage of your consumption covered by solar")
 
             # Roof Metrics
             st.markdown("---")

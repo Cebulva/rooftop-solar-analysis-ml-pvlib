@@ -34,7 +34,7 @@ def get_model(path):
     return load_roof_model(path)
 
 # --- CONFIG ---
-st.set_page_config(page_title="SolarSight AI", layout="wide")
+st.set_page_config(page_title="SolarSight", layout="wide")
 
 if 'step' not in st.session_state: st.session_state.step = 0
 if 'data' not in st.session_state: st.session_state.data = {}

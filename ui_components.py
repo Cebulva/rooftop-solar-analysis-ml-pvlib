@@ -33,7 +33,7 @@ def render_sidebar():
         st.session_state["selected_pos"] = None
 
     with st.sidebar:
-        st.title("SolarSight AI")
+        st.title("SolarSight")
 
         # Show current inquiry ID if active
         if st.session_state.get("inquiry_id"):

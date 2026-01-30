@@ -20,6 +20,18 @@ from src.building_analysis import analyze_building_solar_potential
 MONTH_ORDER = ['January', 'February', 'March', 'April', 'May', 'June',
                'July', 'August', 'September', 'October', 'November', 'December']
 
+# Environmental Impact Constants (Germany-specific)
+ENV_IMPACT = {
+    'GRID_CO2_KG_PER_KWH': 0.380,      # kg CO2 per kWh (German grid 2024)
+    'CO2_PER_TREE_KG_YEAR': 21,         # kg CO2 absorbed per mature tree per year
+    'CAR_CO2_KG_PER_YEAR': 2400,        # kg CO2 per avg car per year (12,000 km)
+    'CO2_PER_KM_KG': 0.12,              # kg CO2 per km driven (avg car)
+    'COAL_KG_PER_KWH': 0.9,             # kg coal per kWh (coal plant)
+    'PHONE_CHARGE_WH': 12,              # Wh per smartphone charge
+    'PANEL_LIFETIME_YEARS': 25,         # Solar panel lifespan
+    'DEGRADATION_FACTOR': 0.92,         # 25-year avg accounting for efficiency loss
+}
+
 
 def azimuth_to_orientation(azimuth):
     """Convert azimuth angle to orientation name."""
@@ -261,7 +273,57 @@ def render_final_report(lat, lon):
     else:
         st.warning(f"**25-Year Net Result:** {int(lifetime_profit):,} EUR")
 
+    # === ENVIRONMENTAL IMPACT ===
+    st.divider()
+    st.header("🌍 Environmental Impact")
+
+    # Calculate environmental metrics
+    env_metrics = calculate_environmental_impact(actual_production)
+
+    # Display impact cards
+    col_env1, col_env2, col_env3, col_env4 = st.columns(4)
+
+    with col_env1:
+        st.metric(
+            "🌳 Trees Equivalent",
+            f"{env_metrics['trees_equivalent']:.0f}",
+            help="Number of mature trees needed to absorb the same CO₂"
+        )
+
+    with col_env2:
+        st.metric(
+            "💨 CO₂ Avoided",
+            f"{env_metrics['co2_avoided_tonnes']:.1f} t/year",
+            help="Tonnes of CO₂ emissions avoided annually"
+        )
+
+    with col_env3:
+        st.metric(
+            "🚗 Cars Off Road",
+            f"{env_metrics['cars_equivalent']:.1f}",
+            help="Equivalent cars removed from roads for a year"
+        )
+
+    with col_env4:
+        st.metric(
+            "�ite Coal Saved",
+            f"{env_metrics['coal_avoided_kg']:.0f} kg",
+            help="Kilograms of coal not burned annually"
+        )
+
+    # Lifetime impact
+    st.markdown(f"""
+    **📊 25-Year Lifetime Impact:**
+    - **{env_metrics['lifetime_co2_tonnes']:.1f} tonnes** of CO₂ avoided
+    - Equivalent to planting **{env_metrics['lifetime_trees']:.0f} trees**
+    - Like driving **{env_metrics['km_avoided']:,.0f} km** less
+    """)
+
+    # Store for PDF
+    st.session_state.data['env_metrics'] = env_metrics
+
     # Tips
+    st.divider()
     st.info("""
     💡 **Tips to increase savings:**
     - Add a battery storage to increase self-consumption from 30% to 60-70%
@@ -383,6 +445,9 @@ def render_final_report(lat, lon):
         # Get monthly data if available
         monthly_data = data_sorted if data_sorted is not None else None
 
+        # Get environmental metrics
+        env_metrics = st.session_state.data.get("env_metrics")
+
         try:
             pdf_bytes = generate_solar_report_pdf(
                 solar_results=solar_results,
@@ -392,6 +457,7 @@ def render_final_report(lat, lon):
                 panel_image=panel_image,
                 monthly_data=monthly_data,
                 inquiry_id=st.session_state.get("inquiry_id"),
+                env_metrics=env_metrics,
             )
 
             # Generate filename with inquiry ID if available
@@ -433,6 +499,54 @@ def calculate_annual_benefit(production, consumption):
     earnings_feedin = fed_in * CONSTANTS['FEED_IN_TARIFF']
 
     return savings_usage + earnings_feedin
+
+
+def calculate_environmental_impact(annual_production_kwh: float) -> dict:
+    """
+    Calculate environmental impact metrics from solar production.
+
+    Args:
+        annual_production_kwh: Annual solar energy production in kWh
+
+    Returns:
+        Dictionary with environmental impact metrics
+    """
+    # Annual CO2 avoided (kg and tonnes)
+    co2_avoided_kg = annual_production_kwh * ENV_IMPACT['GRID_CO2_KG_PER_KWH']
+    co2_avoided_tonnes = co2_avoided_kg / 1000
+
+    # Trees equivalent (number of mature trees to absorb same CO2)
+    trees_equivalent = co2_avoided_kg / ENV_IMPACT['CO2_PER_TREE_KG_YEAR']
+
+    # Cars off the road equivalent
+    cars_equivalent = co2_avoided_kg / ENV_IMPACT['CAR_CO2_KG_PER_YEAR']
+
+    # Kilometers of driving avoided
+    km_avoided = co2_avoided_kg / ENV_IMPACT['CO2_PER_KM_KG']
+
+    # Coal not burned (kg)
+    coal_avoided_kg = annual_production_kwh * ENV_IMPACT['COAL_KG_PER_KWH']
+
+    # Smartphone charges possible
+    phone_charges = (annual_production_kwh * 1000) / ENV_IMPACT['PHONE_CHARGE_WH']
+
+    # 25-year lifetime impact (with degradation factor)
+    lifetime_years = ENV_IMPACT['PANEL_LIFETIME_YEARS']
+    degradation = ENV_IMPACT['DEGRADATION_FACTOR']
+    lifetime_co2_tonnes = co2_avoided_tonnes * lifetime_years * degradation
+    lifetime_trees = trees_equivalent * lifetime_years
+
+    return {
+        'co2_avoided_kg': co2_avoided_kg,
+        'co2_avoided_tonnes': co2_avoided_tonnes,
+        'trees_equivalent': trees_equivalent,
+        'cars_equivalent': cars_equivalent,
+        'km_avoided': km_avoided,
+        'coal_avoided_kg': coal_avoided_kg,
+        'phone_charges': phone_charges,
+        'lifetime_co2_tonnes': lifetime_co2_tonnes,
+        'lifetime_trees': lifetime_trees,
+    }
 
 
 def reindex_by_month(data):
