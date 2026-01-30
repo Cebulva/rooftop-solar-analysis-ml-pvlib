@@ -1,54 +1,120 @@
-# ☀️ SolarSight: AI-Powered Roof Analysis & Solar Potential
+# SolarSight
 
-**SolarSight** is an end-to-end computer vision pipeline designed to automate rooftop solar assessments. By leveraging deep learning and geospatial math, the tool transforms raw satellite imagery into vectorized geometry for precise energy production modeling.
-
-> [!IMPORTANT]
-> **🚧 Work In Progress (WIP)**: This project is currently under active development. Core AI and geometric engines are functional, while interactive reporting features are being finalized.
+**SolarSight** is an end-to-end web application for automated rooftop solar analysis. It combines deep learning, geospatial processing, and solar physics simulation to help homeowners evaluate their solar potential and connect with local installers.
 
 ---
 
-## 🔍 Overview
-Calculating solar potential manually is time-consuming. **SolarSight** automates this by:
-1.  **Projecting** global coordinates to pixel-precise satellite tiles.
-2.  **Segmenting** roof structures using a custom-trained U-Net.
-3.  **Refining** the geometry through morphological cleaning and spatial filtering.
-4.  **Reporting** energy yield based on vectorized area and azimuth.
+## Overview
+
+SolarSight automates the solar assessment process:
+
+1. **Locate** - Find your building using address search or map selection
+2. **Segment** - AI-powered roof detection using a custom U-Net model
+3. **Refine** - Interactive canvas for manual boundary adjustments
+4. **Analyze** - Calculate solar production using PVGIS satellite data
+5. **Report** - Generate PDF reports with financial and environmental metrics
+6. **Connect** - Find nearby solar installers and request quotes
 
 ---
 
-## 👇 Features
- - <details>
-    <summary><b>Technical Highlights (Click to expand)</b></summary>
-    
-    - <b>AI-Powered Rooftop Extraction</b>: Uses a custom-trained U-Net model to segment roof structures from high-resolution satellite imagery.
-    - <b>Geometric Vectorization And Analysis</b>: Converts raw AI pixel masks into clean polygons to calculate precise roof area and orientation (azimuth).
-    - <b>Intelligent Noise Suppression</b>: Implements advanced geometric and spatial filtering to distinguish target rooftops from streets, sidewalks, and neighboring structures.
-    - <b>Human-in-the-Loop Refinement</b>: Integrated Streamlit dashboard allowing users to manually adjust AI-generated vectors for 100% accuracy.
-    - <b>Precise Geospatial Centering</b>: Custom Mercator projection logic ensuring sub-pixel centering of images based on specific Latitude And Longitude coordinates.
-    <br>
-    </details>
+## Features
+
+- **AI Roof Segmentation**: Custom-trained U-Net model extracts roof structures from satellite imagery
+- **Interactive Refinement**: Draw and adjust roof boundaries with precision tools
+- **Solar Simulation**: PVGIS-based energy yield calculations with location-specific irradiance data
+- **Financial Analysis**: Investment costs, payback period, and 25-year profit projections (German market)
+- **Environmental Impact**: CO2 avoided, trees equivalent, and other sustainability metrics
+- **Dealer Finder**: Search nearby solar installers with quality/price/delivery scoring
+- **Quote System**: In-app quote requests with email notifications
+- **AI Chat Assistant**: RAG-powered chatbot for solar-related questions
+- **PDF Reports**: Downloadable reports with system specs, financials, and panel visualization
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-| Category | Tools & Technologies |
+| Category | Technologies |
 | :--- | :--- |
-| **Deep Learning** | PyTorch, Torchvision (U-Net) |
-| **Computer Vision** | OpenCV, Scipy (Morphological Filtering) |
-| **Frontend/App** | Streamlit, Streamlit-Drawable-Canvas |
-| **Data & APIs** | ArcGIS World Imagery API, NumPy, Requests |
-| **Geospatial** | Web Mercator Projection, Lat/Lon-to-Pixel Mapping |
+| **Frontend** | Streamlit, Streamlit-Folium, Streamlit-Drawable-Canvas |
+| **Deep Learning** | PyTorch, segmentation-models-pytorch (U-Net) |
+| **Computer Vision** | OpenCV, Pillow, scikit-image |
+| **Solar Simulation** | pvlib, pysolar, PVGIS API |
+| **Geospatial** | GeoPandas, Shapely, Folium, geopy, OSMnx |
+| **LLM / RAG** | Groq API, ChromaDB, sentence-transformers |
+| **Data** | NumPy, Pandas, SQLite |
+| **PDF Generation** | fpdf2 |
+| **APIs** | PVGIS (EU JRC), OpenStreetMap, Esri ArcGIS Imagery |
 
 ---
 
-## 🚀 Roadmap (WIP Status)
+## Installation
 
-- [x] **Core AI Model**: U-Net implementation for roof segmentation.
-- [x] **Geospatial Engine**: Pixel-precise centering and multi-tile stitching.
-- [x] **Geometry Pipeline**: Object filtering based on area and aspect ratio.
-- [ ] **Interactive Canvas**: Manual vertex adjustment in Streamlit (In Development).
-- [ ] **Solar Engine**: Calculation of regional irradiation and panel capacity.
-- [ ] **Export Logic**: PDF report generation for homeowners.
+```bash
+# Clone the repository
+git clone https://github.com/azizisahand/rooftop-solar-analysis-ml-pvlib.git
+cd rooftop-solar-analysis-ml-pvlib
+
+# Create conda environment
+conda env create -f environment.yml
+conda activate solar-env
+
+# Set up environment variables
+cp .env.example .env
+# Edit .env with your API keys (GROQ_API_KEY, etc.)
+
+# Run the application
+streamlit run app.py
+```
 
 ---
+
+## Usage
+
+1. **Start** - Launch the app and click "Start New Analysis"
+2. **Locate** - Search for your address or click on the map
+3. **Refine** - Adjust the AI-detected roof boundary if needed
+4. **Questionnaire** - Enter household details and energy consumption
+5. **Analysis** - Review solar panel placement and energy calculations
+6. **Report** - Download PDF report and find local installers
+
+---
+
+## Project Structure
+
+```
+├── app.py                 # Main Streamlit application
+├── stages/                # Multi-step workflow stages
+│   ├── stage_0_start.py
+│   ├── stage_1_preview.py
+│   ├── stage_2_refine.py
+│   ├── stage_3a_questionnaire.py
+│   ├── stage_3b_solar.py
+│   └── stage_4_report.py
+├── src/                   # Core modules
+│   ├── model_engine.py    # U-Net model loading
+│   ├── solar_analysis.py  # PVGIS integration
+│   ├── german_solar_calculator.py
+│   ├── pdf_generator.py
+│   ├── dealer_finder.py
+│   ├── rag_bot.py         # AI chat assistant
+│   └── ...
+├── model/                 # Trained U-Net weights
+├── data/                  # Knowledge base for RAG
+└── environment.yml        # Conda dependencies
+```
+
+---
+
+## Team
+
+| Name | GitHub |
+| :--- | :--- |
+| Victoria Vasilieva | [@victoria-vasilieva](https://github.com/victoria-vasilieva) |
+| Olaf Bulas | [@Cebulva](https://github.com/Cebulva) |
+| Sahand Azizi | [@azizisahand](https://github.com/azizisahand) |
+
+---
+
+## License
+
+This project is developed as part of an academic program. See LICENSE for details.
