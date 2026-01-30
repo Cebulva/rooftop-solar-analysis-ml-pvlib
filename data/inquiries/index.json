@@ -1,5 +1,5 @@
 {
-  "last_id": 11,
+  "last_id": 12,
   "inquiries": {
     "INQ-001": {
       "created": "2026-01-29T10:53:12.293115",
@@ -99,6 +99,15 @@
       "lon": null,
       "current_step": 1,
       "system_kwp": null
+    },
+    "INQ-012": {
+      "created": "2026-01-30T13:03:45.836413",
+      "modified": "2026-01-30T13:05:14.176650",
+      "address": "",
+      "lat": 48.88841293388184,
+      "lon": 12.790065407752992,
+      "current_step": 5,
+      "system_kwp": 4.4
     }
   }
 }
