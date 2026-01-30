@@ -327,13 +327,15 @@ def show():
                     f"{annual_production:,.0f} kWh/yr",
                     f"{coverage_pct:.0f}%",
                 ]
-                _weights = [max(len(v), 4) for v in _vals]
-                m1, m2, m3, m4, m5 = st.columns(_weights)
-                m1.metric("Panels", _vals[0])
-                m2.metric("System", _vals[1])
-                m3.metric("Irradiance", _vals[2])
-                m4.metric("Production", _vals[3])
-                m5.metric("Coverage", _vals[4])
+                _labels = ["Panels", "System", "Irradiance", "Production", "Coverage"]
+                _weights = [max(len(l), len(v)) for l, v in zip(_labels, _vals)]
+                with st.container(border=True):
+                    m1, m2, m3, m4, m5 = st.columns(_weights)
+                    m1.metric(_labels[0], _vals[0])
+                    m2.metric(_labels[1], _vals[1])
+                    m3.metric(_labels[2], _vals[2])
+                    m4.metric(_labels[3], _vals[3])
+                    m5.metric(_labels[4], _vals[4])
 
                 st.image(display_img, width="stretch", caption="Panel placement on roof")
 
