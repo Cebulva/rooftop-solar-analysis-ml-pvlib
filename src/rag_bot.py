@@ -518,9 +518,11 @@ def render_chat_interface():
         # --- Single follow-up button below messages ---
         # Show button - use LLM suggestion or fallback to "More details"
         follow_up_text = state.get("next_question") or "More details"
-        
-        button_key = f"followup_{abs(hash(follow_up_text))}"
-        if st.button(f"➡️ {follow_up_text}", key=button_key, width="stretch"):
+
+        # Use message count to ensure unique key across reruns
+        msg_count = len(state.get("messages", []))
+        button_key = f"followup_{msg_count}_{abs(hash(follow_up_text))}"
+        if st.button(f"➡️ {follow_up_text}", key=button_key, use_container_width=True):
             question_to_send = follow_up_text
             state["next_question"] = None  # Clear for next time
             handle_message(question_to_send)
