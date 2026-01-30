@@ -1,5 +1,5 @@
 Type,State,Program,Subsidy,Max Size/Bonus,Link,ProgramType
-Federal,All,EEG Feed-in Tariff,"19.5 ct/kWh","100 kWp +1 ct/kWh",www.bundesnetzagentur.de,Incentive
+Federal,All,EEG Feed-in Tariff,"7.86-12.47 ct/kWh","-1% every 6 months",www.bundesnetzagentur.de,Incentive
 Federal,All,"KfW 270 – Renewable Energy Standard","Loan up to 100% costs","20 years",www.kfw.de,Loan
 State,Baden-Württemberg,PV Subsidy BW,"€500/kWp","+€200 storage",www.l-bank.de,Subsidy
 State,Bavaria,PV Bayern,"€400/kWp","NA",www.stmwi.bayern.de,Subsidy
