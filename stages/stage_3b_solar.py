@@ -644,7 +644,7 @@ def show():
             # Tilt Angle Slider - visible for PITCHED roofs
             if selected_type == "Pitched":
                 st.slider(
-                    "Panel Tilt Angle (°)",
+                    "Tilt Angle (°)",
                     min_value=10,
                     max_value=60,
                     value=int(st.session_state.data["user_tilt"]),
