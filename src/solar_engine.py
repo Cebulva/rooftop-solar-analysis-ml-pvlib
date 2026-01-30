@@ -161,8 +161,6 @@ def draw_azimuth_arrow(img, azimuth_deg):
     center = (w // 2, h // 2)
     length = min(h, w) // 4
     canvas = img.copy()
-    # North Reference
-    cv2.arrowedLine(canvas, center, (center[0], center[1] - length), (255, 255, 255), 2)
     # Azimuth Arrow
     theta = np.radians(azimuth_deg - 90)
     end_x = int(center[0] + length * np.cos(theta))
