@@ -405,7 +405,7 @@ def show():
                     current_irradiance, annual_production, coverage_pct
                 )
 
-                st.image(display_img, use_container_width=True, caption="Panel placement on roof")
+                st.image(display_img, width="stretch", caption="Panel placement on roof")
 
                 # Show placement optimization status
                 if grid_warning:
@@ -469,7 +469,7 @@ def show():
                     contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                     cv2.drawContours(shadow_img, contours, -1, (0, 255, 0), 1)
 
-                st.image(shadow_img, use_container_width=True, caption="Usable area overlay")
+                st.image(shadow_img, width="stretch", caption="Usable area overlay")
 
                 st.slider(
                     "Shadow Tolerance",
@@ -499,7 +499,7 @@ def show():
                 contours, _ = cv2.findContours(sun_mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
                 cv2.drawContours(display_img, contours, -1, (0, 255, 0), 1)
 
-            st.image(display_img, use_container_width=True, caption="Adjust shadow tolerance to define usable area")
+            st.image(display_img, width="stretch", caption="Adjust shadow tolerance to define usable area")
 
         if not shadow_confirmed:
             # Shadow Tolerance setup - shown prominently when not yet confirmed
@@ -584,7 +584,20 @@ def show():
                       key="az_slider_widget", on_change=update_azimuth,
                       help="Watch the Irradiance Potential change as you rotate!")
 
-            # Detection Details - closed expander above Roof Form
+            # Panel Orientation
+            selected_orientation = st.selectbox(
+                "Panel Orientation",
+                ["Portrait", "Landscape"],
+                index=0 if current_orientation == "Portrait" else 1,
+                help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
+            )
+
+            # Update orientation if changed
+            if selected_orientation != st.session_state.data.get("panel_orientation"):
+                st.session_state.data["panel_orientation"] = selected_orientation
+                st.rerun()
+
+            # Detection Details
             if SHOW_DEBUG_INFO and "detection_debug" in st.session_state.data:
                 debug = st.session_state.data["detection_debug"]
                 confidence = st.session_state.data.get("detection_confidence", 0)
@@ -598,8 +611,9 @@ def show():
                     with col_det2:
                         st.metric("Confidence", f"{confidence:.0%}")
 
-                    if manually_set and selected_type != detected_type:
-                        st.info(f"You selected **{selected_type}** (detection suggests {detected_type})")
+                    current_roof_type = st.session_state.data.get("auto_roof_type", "Pitched")
+                    if manually_set and current_roof_type != detected_type:
+                        st.info(f"You selected **{current_roof_type}** (detection suggests {detected_type})")
                         if st.button("Reset to Auto-Detection", key="reset_roof_type"):
                             st.session_state.data["auto_roof_type"] = detected_type
                             st.session_state.data["roof_type_manually_set"] = False
@@ -615,22 +629,9 @@ def show():
                     st.write(f"**Texture Variance:** {debug.get('std_dev', 0):.1f} "
                             f"(Pitched if > 15)")
 
-            # Roof Form - full width, stacked
+            # Roof Form
             selected_type = st.selectbox("Roof Form", ["Pitched", "Flat"],
                                         index=0 if st.session_state.data["auto_roof_type"] == "Pitched" else 1)
-
-            # Panel Orientation - full width, stacked below Roof Form
-            selected_orientation = st.selectbox(
-                "Panel Orientation",
-                ["Portrait", "Landscape"],
-                index=0 if current_orientation == "Portrait" else 1,
-                help="Portrait: Vertical strings (1.76m wide). Landscape: Horizontal strings (1.13m wide)."
-            )
-
-            # Update orientation if changed
-            if selected_orientation != st.session_state.data.get("panel_orientation"):
-                st.session_state.data["panel_orientation"] = selected_orientation
-                st.rerun()
 
             # Re-run if roof type changes to update tilt
             if selected_type != st.session_state.data["auto_roof_type"]:
