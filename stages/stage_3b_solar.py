@@ -62,87 +62,6 @@ DEFAULT_PANEL_ORIENTATION = "Portrait"  # "Portrait" or "Landscape"
 
 # ==========================================
 
-def draw_metrics_overlay(img, panel_count, system_kwp, irradiance, annual_prod, coverage):
-    """Draw system metrics as a semi-transparent banner with labels above values."""
-    overlay = img.copy()
-    h, w = img.shape[:2]
-
-    # Banner height — two rows (label + value)
-    banner_h = max(48, h // 7)
-
-    # Dark semi-transparent banner
-    cv2.rectangle(overlay, (0, 0), (w, banner_h), (0, 0, 0), -1)
-    img = cv2.addWeighted(overlay, 0.55, img, 0.45, 0)
-
-    font = cv2.FONT_HERSHEY_SIMPLEX
-
-    # Labels and values as parallel lists
-    labels = ["Panels", "System", "Irradiance", "Production", "Coverage"]
-    values = [
-        str(panel_count),
-        f"{system_kwp:.2f} kWp",
-        f"{irradiance:.0f} W/m2",
-        f"{annual_prod:,.0f} kWh/yr",
-        f"{coverage:.0f}%",
-    ]
-
-    # Scale fonts relative to banner height
-    label_scale = banner_h / 120.0
-    value_scale = banner_h / 80.0
-    label_thick = max(1, int(label_scale + 0.5))
-    value_thick = max(1, int(value_scale + 0.5))
-
-    # Measure total width to center the block
-    col_gap = int(w * 0.04)
-    col_widths = []
-    for lbl, val in zip(labels, values):
-        lw = cv2.getTextSize(lbl, font, label_scale, label_thick)[0][0]
-        vw = cv2.getTextSize(val, font, value_scale, value_thick)[0][0]
-        col_widths.append(max(lw, vw))
-
-    total_w = sum(col_widths) + col_gap * (len(labels) - 1)
-
-    # Shrink if too wide
-    if total_w > w - 20:
-        shrink = (w - 20) / total_w
-        label_scale *= shrink
-        value_scale *= shrink
-        label_thick = max(1, int(label_scale + 0.5))
-        value_thick = max(1, int(value_scale + 0.5))
-        col_gap = int(col_gap * shrink)
-        col_widths = []
-        for lbl, val in zip(labels, values):
-            lw = cv2.getTextSize(lbl, font, label_scale, label_thick)[0][0]
-            vw = cv2.getTextSize(val, font, value_scale, value_thick)[0][0]
-            col_widths.append(max(lw, vw))
-        total_w = sum(col_widths) + col_gap * (len(labels) - 1)
-
-    label_h = cv2.getTextSize("A", font, label_scale, label_thick)[0][1]
-    value_h = cv2.getTextSize("0", font, value_scale, value_thick)[0][1]
-
-    # Vertical positions: label row then value row, centered in banner
-    row_gap = int(banner_h * 0.1)
-    block_h = label_h + row_gap + value_h
-    top_y = (banner_h - block_h) // 2
-    label_y = top_y + label_h
-    value_y = label_y + row_gap + value_h
-
-    # Draw each column, center-aligned within its slot
-    x_cursor = (w - total_w) // 2
-    label_color = (180, 180, 180)  # Light gray for labels
-    value_color = (255, 255, 255)  # White for values
-
-    for lbl, val, cw in zip(labels, values, col_widths):
-        lw = cv2.getTextSize(lbl, font, label_scale, label_thick)[0][0]
-        vw = cv2.getTextSize(val, font, value_scale, value_thick)[0][0]
-        lx = x_cursor + (cw - lw) // 2
-        vx = x_cursor + (cw - vw) // 2
-        cv2.putText(img, lbl, (lx, label_y), font, label_scale, label_color, label_thick, cv2.LINE_AA)
-        cv2.putText(img, val, (vx, value_y), font, value_scale, value_color, value_thick, cv2.LINE_AA)
-        x_cursor += cw + col_gap
-
-    return img
-
 def update_azimuth():
     st.session_state.data["user_azimuth"] = float(st.session_state.az_slider_widget)
     # Recalculate irradiance when azimuth changes
@@ -399,11 +318,24 @@ def show():
                 for p in panels:
                     display_img = overlay_panel_sprite(display_img, p, panel_sprite)
 
-                # Draw system metrics banner on top edge
-                display_img = draw_metrics_overlay(
-                    display_img, selected_count, system_kwp,
-                    current_irradiance, annual_production, coverage_pct
-                )
+                # System metrics as native Streamlit widgets (sharp at any resolution)
+                # Weight columns by value width so spacing is even
+                _vals = [
+                    str(selected_count),
+                    f"{system_kwp:.2f} kWp",
+                    f"{current_irradiance:.0f} W/m\u00b2",
+                    f"{annual_production:,.0f} kWh/yr",
+                    f"{coverage_pct:.0f}%",
+                ]
+                _labels = ["Panels", "System", "Irradiance", "Production", "Coverage"]
+                _weights = [max(len(l), len(v)) for l, v in zip(_labels, _vals)]
+                with st.container(border=True):
+                    m1, m2, m3, m4, m5 = st.columns(_weights)
+                    m1.metric(_labels[0], _vals[0])
+                    m2.metric(_labels[1], _vals[1])
+                    m3.metric(_labels[2], _vals[2])
+                    m4.metric(_labels[3], _vals[3])
+                    m5.metric(_labels[4], _vals[4])
 
                 st.image(display_img, width="stretch", caption="Panel placement on roof")
 
@@ -644,7 +576,7 @@ def show():
             # Tilt Angle Slider - visible for PITCHED roofs
             if selected_type == "Pitched":
                 st.slider(
-                    "Panel Tilt Angle (°)",
+                    "Tilt Angle (°)",
                     min_value=10,
                     max_value=60,
                     value=int(st.session_state.data["user_tilt"]),
