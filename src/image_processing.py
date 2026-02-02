@@ -266,6 +266,31 @@ def get_zoom_crop(image, mask, padding=CROP_PADDING, min_size=MIN_CROP_SIZE):
 
     return image[start_y:end_y, start_x:end_x], mask[start_y:end_y, start_x:end_x], (start_x, start_y)
 
+def select_center_component(mask_8u):
+    """Select the connected component closest to image center, preserving original pixels."""
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask_8u, connectivity=8)
+
+    if num_labels <= 1:
+        return mask_8u
+
+    img_center = np.array([mask_8u.shape[1] / 2, mask_8u.shape[0] / 2])
+
+    best_label = None
+    min_dist = float('inf')
+
+    for i in range(1, num_labels):
+        if stats[i, cv2.CC_STAT_AREA] < 300:
+            continue
+        dist = np.linalg.norm(centroids[i] - img_center)
+        if dist < min_dist:
+            min_dist = dist
+            best_label = i
+
+    if best_label is None:
+        return np.zeros_like(mask_8u)
+
+    return ((labels == best_label).astype(np.uint8) * 255)
+
 def filter_non_roof_objects(mask_8u):
     contours, _ = cv2.findContours(mask_8u, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
