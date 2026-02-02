@@ -15,12 +15,13 @@ dependencies:
   - pvlib                  
   - scikit-learn
   - matplotlib>=3.10       
+  - ipywidgets
 
 # === Mapping & Geometry ===
   - geopandas
   - shapely>=2.1
   - folium>=0.20
-  #- mercantile # Archive
+  - mercantile
   - geopy
   - scikit-image>=0.26
   - osmnx
@@ -28,9 +29,9 @@ dependencies:
 
 # === Machine Learning ===
   - pytorch                
-  # - torchvision #Used in Notebook
-  # - tqdm  #Used in Notebook
-  # - pycocotools # Archive
+  - torchvision
+  - tqdm
+  - pycocotools
   - rasterio
   - requests
 
@@ -40,6 +41,7 @@ dependencies:
 
 # === Pip Packages ===
   - pip:
+    - llama-index-llms-google-genai
     - opencv-python-headless==4.12.0.88
     - streamlit-folium==0.25.3
     - streamlit-drawable-canvas==0.9.3
