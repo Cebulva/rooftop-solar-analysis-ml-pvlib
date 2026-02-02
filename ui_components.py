@@ -48,6 +48,7 @@ def render_sidebar():
             st.session_state.data = {}
             st.session_state.inquiry_id = None
             st.session_state["selected_pos"] = None
+            st.session_state.pop("rag_bot", None)
             st.cache_data.clear()
             st.rerun()
 

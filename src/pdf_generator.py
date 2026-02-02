@@ -120,9 +120,11 @@ def generate_solar_report_pdf(
 
     annual_consumption = consumption_inputs.get('annual_kwh', 0)
 
-    # Calculate production from final_analysis
-    specific_yield = final_analysis.get('production', {}).get('specific_yield_kwh_kwp', 900)
-    solar_production = system_kwp * specific_yield
+    # Use the exact PVGIS value from stage 3b (single source of truth)
+    solar_production = solar_results.get('annual_production_kwh', 0)
+    if not solar_production:
+        solar_production = system_kwp * final_analysis.get('production', {}).get('specific_yield_kwh_kwp', 900)
+    specific_yield = solar_production / system_kwp if system_kwp > 0 else 0
 
     # Coverage
     coverage_pct = (solar_production / annual_consumption * 100) if annual_consumption > 0 else 0

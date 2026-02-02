@@ -6,6 +6,7 @@ from shapely.geometry import Polygon
 from shapely import affinity
 import ui_components as ui
 
+
 # Solar Engine - Core solar calculations and roof detection
 from src.solar_engine import (
     get_masked_roof_array,
@@ -263,9 +264,9 @@ def show():
 
     # Pre-compute metrics used by both columns
     system_kwp = (selected_count * 440) / 1000
-    peak_sun_hours = 4.5  # Average for Central Europe
-    system_efficiency = 0.85  # Account for losses
-    annual_production = system_kwp * peak_sun_hours * 365 * (current_irradiance / 1000) * system_efficiency
+    base_specific_yield = 950  # kWh/kWp/year, German average (PVGIS baseline)
+    orientation_factor = min(current_irradiance / 1000, 1.0)  # tilt/azimuth quality vs ideal
+    annual_production = system_kwp * base_specific_yield * orientation_factor
     coverage_pct = (annual_production / annual_kwh * 100) if annual_kwh > 0 else 0
 
     string_info = f"{selected_count}"
@@ -364,6 +365,7 @@ def show():
                             pdf_panel_img = overlay_panel_sprite(pdf_panel_img, p, pdf_panel_sprite)
                         st.session_state.data["pdf_panel_image"] = pdf_panel_img
 
+                        # Store the exact same values displayed in the live preview
                         st.session_state.data["solar_results"] = {
                             "total_roof_area_m2": total_area_m2,
                             "usable_roof_area_m2": usable_area_m2,
@@ -377,6 +379,11 @@ def show():
                             "annual_production_kwh": annual_production,
                             "coverage_percentage": coverage_pct,
                         }
+
+                        # Clear stale report data so it regenerates with new settings
+                        for key in ["final_analysis", "detailed_solar_data"]:
+                            st.session_state.data.pop(key, None)
+                        st.session_state.pop("rag_bot", None)
 
                         # Auto-save inquiry (includes images stored earlier)
                         if st.session_state.get("inquiry_id"):

@@ -104,21 +104,23 @@ def show():
     col_back1, col_back2, col_back3 = st.columns(3)
     with col_back1:
         if st.button("⬅️ Edit Solar Analysis", key="back_to_3b"):
-            # Clear final analysis so it recalculates when user comes back
-            if "final_analysis" in st.session_state.data:
-                del st.session_state.data["final_analysis"]
+            for key in ["final_analysis", "detailed_solar_data"]:
+                st.session_state.data.pop(key, None)
+            st.session_state.pop("rag_bot", None)
             st.session_state.step = 4
             st.rerun()
     with col_back2:
         if st.button("⬅️ Edit Questionnaire", key="back_to_3a"):
-            if "final_analysis" in st.session_state.data:
-                del st.session_state.data["final_analysis"]
+            for key in ["final_analysis", "detailed_solar_data"]:
+                st.session_state.data.pop(key, None)
+            st.session_state.pop("rag_bot", None)
             st.session_state.step = 3
             st.rerun()
     with col_back3:
         if st.button("⬅️ Edit Roof", key="back_to_2"):
-            if "final_analysis" in st.session_state.data:
-                del st.session_state.data["final_analysis"]
+            for key in ["final_analysis", "detailed_solar_data"]:
+                st.session_state.data.pop(key, None)
+            st.session_state.pop("rag_bot", None)
             st.session_state.step = 2
             st.rerun()
 
@@ -152,6 +154,15 @@ def run_final_analysis(lat, lon, consumption_inputs, solar_results):
         has_ev=consumption_inputs['has_ev'],
         has_heat_pump=consumption_inputs['has_heat_pump']
     )
+
+    # Override with the exact production value from stage 3b (single source of truth)
+    actual_kwp = solar_results['system_kwp']
+    stage3b_production = solar_results.get('annual_production_kwh')
+    if stage3b_production is not None and stage3b_production > 0:
+        analysis['production']['annual_kwh'] = stage3b_production
+        analysis['production']['specific_yield_kwh_kwp'] = (
+            stage3b_production / actual_kwp if actual_kwp > 0 else 0
+        )
 
     # Store the analysis
     st.session_state.data['final_analysis'] = analysis
@@ -188,13 +199,13 @@ def render_final_report(lat, lon):
         )
 
     with col_m2:
-        # Calculate actual production based on system size from stage 3b
-        specific_yield = analysis['production']['specific_yield_kwh_kwp']
-        actual_production = actual_kwp * specific_yield
+        # Use the exact value from stage 3b (single source of truth)
+        actual_production = solar_results.get('annual_production_kwh', 0)
+        specific_yield = actual_production / actual_kwp if actual_kwp > 0 else 0
         st.metric(
             "Solar Production",
-            f"{int(actual_production):,} kWh",
-            help="Based on PVGIS satellite data"
+            f"{actual_production:,.0f} kWh",
+            help="Based on location and panel configuration"
         )
 
     with col_m3:
@@ -331,121 +342,20 @@ def render_final_report(lat, lon):
     - Consider an EV to utilize surplus solar production
     """)
 
-    # === DETAILED SOLAR ANALYSIS ===
-    st.divider()
-    st.header("📊 Detailed Solar Analysis")
-
-    # Initialize for PDF export (will be set if data loads successfully)
-    data_sorted = None
-
-    with st.spinner("Fetching satellite weather data..."):
-        # Solar Analysis
-        data, error_msg = analyze_solar_potential(lat, lon)
-
-        # Optimal Panel Angles
-        optimal_angles = get_optimal_panel_angle(lat)
-
-        # Building/Rooftop Analysis
-        building_info = analyze_building_solar_potential(lat, lon)
-
-        if error_msg:
-            st.error(f"Simulation Failed: {error_msg}")
-            st.info("Try a location on land.")
-
-        elif data is not None:
-            # Optimal Panel Angles
-            st.subheader("🔧 Recommended Solar Panel Angles")
-            col_angle1, col_angle2, col_angle3 = st.columns(3)
-            with col_angle1:
-                st.metric("Year-Round Optimal", f"{optimal_angles['year_round_optimal']}°")
-            with col_angle2:
-                st.metric("Summer Optimal", f"{optimal_angles['summer_optimal']}°")
-            with col_angle3:
-                st.metric("Winter Optimal", f"{optimal_angles['winter_optimal']}°")
-
-            st.info("💡 " + optimal_angles['note'])
-
-            st.divider()
-
-            # === BUILDING & ROOFTOP ANALYSIS ===
-            if building_info:
-                st.subheader("🏠 Building & Rooftop Analysis (OpenStreetMap)")
-
-                col_bldg1, col_bldg2, col_bldg3, col_bldg4 = st.columns(4)
-
-                with col_bldg1:
-                    st.metric(
-                        "OSM Roof Area",
-                        f"{building_info['roof_analysis']['usable_area_m2']:.1f} m²",
-                        help="Estimated from OpenStreetMap data"
-                    )
-                with col_bldg2:
-                    st.metric(
-                        "Building Height",
-                        f"{building_info['building_info']['height']:.1f} m",
-                        help="Estimated building height"
-                    )
-                with col_bldg3:
-                    st.metric(
-                        "Building Type",
-                        f"{building_info['building_info']['type']}",
-                    )
-                with col_bldg4:
-                    if building_info['building_info']['levels']:
-                        st.metric("Floors", f"{building_info['building_info']['levels']}")
-                    else:
-                        st.metric("Floors", "N/A")
-
-            st.divider()
-
-            # === SOLAR ENERGY ANALYSIS ===
-            st.subheader("⚡ Solar Energy Production Analysis")
-
-            # Calculate Metrics
-            total_yearly_yield = data['Energy Output (kWh/m²)'].sum()
-
-            if 'Sunny Days' in data.columns:
-                avg_sunny = data['Sunny Days'].mean() * 12
-            else:
-                avg_sunny = 0
-
-            # Display
-            m1, m2 = st.columns(2)
-            m1.metric("Est. Annual Yield", f"{total_yearly_yield:.1f} kWh/m²")
-            m2.metric("Est. Sunny Days / Year", f"{int(avg_sunny)}")
-
-            st.subheader("📅 Monthly Breakdown")
-
-            # Reindex data to proper month order
-            data_sorted = reindex_by_month(data)
-
-            col_chart3, col_chart4 = st.columns(2)
-            with col_chart3:
-                st.write("**Weather Conditions**")
-                weather_cols = [col for col in data_sorted.columns if 'Days' in col]
-                if weather_cols:
-                    st.bar_chart(data_sorted[weather_cols])
-            with col_chart4:
-                st.write("**Energy Output**")
-                st.line_chart(data_sorted['Energy Output (kWh/m²)'])
-
-            st.dataframe(data_sorted, use_container_width=True)
-
     # === FIND NEARBY DEALERS ===
     render_dealer_finder_section(lat, lon, solar_results, analysis)
+
+    # === DETAILED SOLAR ANALYSIS (cached, loads once) ===
+    render_detailed_analysis_section(lat, lon)
 
     # === FINAL ACTIONS ===
     st.divider()
     col_btn1, col_btn2 = st.columns(2)
 
     with col_btn1:
-        # Get images from session state (stored in stage 3b)
         panel_image = st.session_state.data.get("pdf_panel_image")
-
-        # Get monthly data if available
-        monthly_data = data_sorted if data_sorted is not None else None
-
-        # Get environmental metrics
+        cached_detail = st.session_state.data.get("detailed_solar_data")
+        monthly_data = cached_detail.get("data_sorted") if cached_detail else None
         env_metrics = st.session_state.data.get("env_metrics")
 
         try:
@@ -460,7 +370,6 @@ def render_final_report(lat, lon):
                 env_metrics=env_metrics,
             )
 
-            # Generate filename with inquiry ID if available
             inquiry_id = st.session_state.get("inquiry_id")
             if inquiry_id:
                 filename = f"solar_report_{inquiry_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
@@ -484,7 +393,98 @@ def render_final_report(lat, lon):
             st.session_state.step = 1
             st.session_state.data = {}
             st.session_state["selected_pos"] = None
+            st.session_state.pop("rag_bot", None)
             st.rerun()
+
+
+def render_detailed_analysis_section(lat, lon):
+    """Render the detailed solar analysis section with session state caching."""
+    st.divider()
+    st.header("📊 Detailed Solar Analysis")
+
+    # Cache results so they only fetch once per analysis
+    if "detailed_solar_data" not in st.session_state.data:
+        with st.spinner("☀️ Solar Assistant is analyzing satellite weather data..."):
+            data, error_msg = analyze_solar_potential(lat, lon)
+            optimal_angles = get_optimal_panel_angle(lat)
+            building_info = analyze_building_solar_potential(lat, lon)
+
+            data_sorted = None
+            if data is not None and not error_msg:
+                data_sorted = reindex_by_month(data)
+
+            st.session_state.data["detailed_solar_data"] = {
+                "data": data,
+                "data_sorted": data_sorted,
+                "error_msg": error_msg,
+                "optimal_angles": optimal_angles,
+                "building_info": building_info,
+            }
+
+    cached = st.session_state.data["detailed_solar_data"]
+
+    if cached["error_msg"]:
+        st.error(f"Simulation Failed: {cached['error_msg']}")
+        st.info("Try a location on land.")
+
+    elif cached["data"] is not None:
+        optimal_angles = cached["optimal_angles"]
+        building_info = cached["building_info"]
+        data_sorted = cached["data_sorted"]
+        data = cached["data"]
+
+        # Optimal Panel Angles
+        st.subheader("🔧 Recommended Solar Panel Angles")
+        col_angle1, col_angle2, col_angle3 = st.columns(3)
+        with col_angle1:
+            st.metric("Year-Round Optimal", f"{optimal_angles['year_round_optimal']}°")
+        with col_angle2:
+            st.metric("Summer Optimal", f"{optimal_angles['summer_optimal']}°")
+        with col_angle3:
+            st.metric("Winter Optimal", f"{optimal_angles['winter_optimal']}°")
+
+        st.info("💡 " + optimal_angles['note'])
+        st.divider()
+
+        # Building & Rooftop Analysis
+        if building_info:
+            st.subheader("🏠 Building & Rooftop Analysis (OpenStreetMap)")
+            col_bldg1, col_bldg2, col_bldg3, col_bldg4 = st.columns(4)
+            with col_bldg1:
+                st.metric("OSM Roof Area", f"{building_info['roof_analysis']['usable_area_m2']:.1f} m²", help="Estimated from OpenStreetMap data")
+            with col_bldg2:
+                st.metric("Building Height", f"{building_info['building_info']['height']:.1f} m", help="Estimated building height")
+            with col_bldg3:
+                st.metric("Building Type", f"{building_info['building_info']['type']}")
+            with col_bldg4:
+                if building_info['building_info']['levels']:
+                    st.metric("Floors", f"{building_info['building_info']['levels']}")
+                else:
+                    st.metric("Floors", "N/A")
+            st.divider()
+
+        # Solar Energy Analysis
+        if data_sorted is not None:
+            st.subheader("⚡ Solar Energy Production Analysis")
+            total_yearly_yield = data['Energy Output (kWh/m²)'].sum()
+            avg_sunny = data['Sunny Days'].mean() * 12 if 'Sunny Days' in data.columns else 0
+
+            m1, m2 = st.columns(2)
+            m1.metric("Est. Annual Yield", f"{total_yearly_yield:.1f} kWh/m²")
+            m2.metric("Est. Sunny Days / Year", f"{int(avg_sunny)}")
+
+            st.subheader("📅 Monthly Breakdown")
+            col_chart3, col_chart4 = st.columns(2)
+            with col_chart3:
+                st.write("**Weather Conditions**")
+                weather_cols = [col for col in data_sorted.columns if 'Days' in col]
+                if weather_cols:
+                    st.bar_chart(data_sorted[weather_cols])
+            with col_chart4:
+                st.write("**Energy Output**")
+                st.line_chart(data_sorted['Energy Output (kWh/m²)'])
+
+            st.dataframe(data_sorted, use_container_width=True)
 
 
 def calculate_annual_benefit(production, consumption):

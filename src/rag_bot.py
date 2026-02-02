@@ -237,11 +237,15 @@ def get_report_data():
     content_lines = []
 
     if analysis:
-        production_data = analysis.get("production", {})
-        specific_yield = production_data.get("specific_yield_kwh_kwp", 0)
-
-        if specific_yield > 0:
+        # Use the exact PVGIS value from stage 3b (single source of truth)
+        actual_production = solar_results.get("annual_production_kwh", 0)
+        if not actual_production:
+            production_data = analysis.get("production", {})
+            specific_yield = production_data.get("specific_yield_kwh_kwp", 0)
             actual_production = actual_kwp * specific_yield
+        specific_yield = actual_production / actual_kwp if actual_kwp > 0 else 0
+
+        if actual_production > 0:
 
             annual_kwh = consumption_inputs.get("annual_kwh", 0)
             ELECTRICITY_PRICE = 0.35
