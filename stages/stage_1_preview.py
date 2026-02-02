@@ -22,33 +22,29 @@ def show():
     with col_center:
         # Address Search Section
         st.markdown("**Option 1:** Search by address")
+        col_addr, col_btn = st.columns([3, 1])
 
-        # Use a form so Enter key triggers search automatically
-        with st.form(key="address_search_form", clear_on_submit=False):
-            col_addr, col_btn = st.columns([3, 1])
+        with col_addr:
+            address_input = st.text_input(
+                "Enter Address",
+                placeholder="e.g. Musterweg 123, Berlin",
+                key="address_search",
+                label_visibility="collapsed"
+            )
 
-            with col_addr:
-                address_input = st.text_input(
-                    "Enter Address",
-                    placeholder="e.g. Musterweg 123, Berlin",
-                    key="address_search",
-                    label_visibility="collapsed"
-                )
-
-            with col_btn:
-                search_submitted = st.form_submit_button("🔍 Search", use_container_width=True)
-
-            if search_submitted and address_input:
-                with st.spinner("Locating..."):
-                    found = ui.search_address(address_input)
-                    if found:
-                        if st.session_state["selected_pos"]:
-                            st.success(f"📍 Found: {st.session_state.get('found_address', '')[:50]}...")
+        with col_btn:
+            if st.button("🔍 Search", use_container_width=True, key="search_address_btn"):
+                if address_input:
+                    with st.spinner("Locating..."):
+                        found = ui.search_address(address_input)
+                        if found:
+                            if st.session_state["selected_pos"]:
+                                st.success(f"📍 Found: {st.session_state.get('found_address', '')[:50]}...")
+                            else:
+                                st.info(f"Found area. Click on map to select exact building.")
+                            st.rerun()
                         else:
-                            st.info(f"Found area. Click on map to select exact building.")
-                        st.rerun()
-                    else:
-                        st.error("Address not found. Try a different search.")
+                            st.error("Address not found. Try a different search.")
 
         st.markdown("**Option 2:** Click directly on the map to select your building")
 
