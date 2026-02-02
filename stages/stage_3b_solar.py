@@ -138,17 +138,71 @@ def show():
     
     # Shadow tolerance: negative values = stricter (only brightest), positive = more inclusive
     current_threshold = st.session_state.data.get("sun_threshold", 15)
-    sun_mask = get_sunny_polygon_mask(roof_only, mask, threshold_offset=current_threshold)
+    
+    # CRITICAL FIX: Cache sun_mask to prevent coverage changes
+    # Only recalculate sun_mask when threshold actually changes
+    
+    # Track if this is the first time we're calculating the sun_mask
+    is_first_calculation = "cached_sun_threshold" not in st.session_state.data
+    cached_threshold = st.session_state.data.get("cached_sun_threshold")
+    
+    print(f"\n🎭 SUN_MASK CACHE STATUS:")
+    print(f"   is_first_calculation: {is_first_calculation}")
+    print(f"   cached_threshold: {cached_threshold}")
+    print(f"   current_threshold: {current_threshold}")
+    print(f"   Will recalculate sun_mask: {is_first_calculation or cached_threshold != current_threshold}")
+    
+    if is_first_calculation or cached_threshold != current_threshold:
+        # Recalculate sun_mask when: (1) first time, or (2) threshold changes
+        print(f"   🔄 GENERATING NEW SUN_MASK...")
+        sun_mask = get_sunny_polygon_mask(roof_only, mask, threshold_offset=current_threshold)
+        st.session_state.data["cached_sun_mask"] = sun_mask.copy()  # Cache it
+        st.session_state.data["cached_sun_threshold"] = current_threshold
+        print(f"   ✅ Sun_mask generated and cached")
+    else:
+        # Use cached sun_mask - prevents coverage from changing
+        print(f"   ♻️ USING CACHED SUN_MASK")
+        sun_mask = st.session_state.data["cached_sun_mask"]
+    
     usable_area_m2 = np.sum(sun_mask > 0) * pixel_area_m2
 
     # 3. Analysis - IMPROVED ROOF TYPE DETECTION
-    # Always run detection to keep debug info updated with current sun_mask
-    detected_type, confidence, debug_info = analyze_roof_geometry(roof_only, mask, sun_mask)
-
-    # Store current detection results (always updated)
-    st.session_state.data["detection_confidence"] = confidence
-    st.session_state.data["detection_debug"] = debug_info
-    st.session_state.data["detected_roof_type"] = detected_type  # Current detection result
+    # Cache detection results to prevent coverage ratio from changing when adjusting other settings
+    # Re-run detection only if sun_mask has actually changed (which happens when threshold changes)
+    
+    # Check if we have valid cached results
+    has_cached_results = all([
+        "detection_confidence" in st.session_state.data,
+        "detection_debug" in st.session_state.data,
+        "detected_roof_type" in st.session_state.data
+    ])
+    
+    # Debug logging
+    print(f"\n🔍 DETECTION CACHE STATUS:")
+    print(f"   has_cached_results: {has_cached_results}")
+    print(f"   is_first_calculation: {is_first_calculation}")
+    print(f"   cached_threshold: {cached_threshold}")
+    print(f"   current_threshold: {current_threshold}")
+    print(f"   Will run detection: {not has_cached_results or is_first_calculation or cached_threshold != current_threshold}")
+    
+    # Re-detect only if: (1) no cache exists yet, or (2) sun_mask was recalculated
+    if not has_cached_results or is_first_calculation or cached_threshold != current_threshold:
+        # Run detection when cache is missing or sun_mask changed
+        print(f"   🔄 RUNNING DETECTION...")
+        detected_type, confidence, debug_info = analyze_roof_geometry(roof_only, mask, sun_mask)
+        
+        # Cache the detection results
+        st.session_state.data["detection_confidence"] = confidence
+        st.session_state.data["detection_debug"] = debug_info
+        st.session_state.data["detected_roof_type"] = detected_type
+        print(f"   ✅ Detection complete: {detected_type}, Coverage: {debug_info.get('coverage_ratio', 0):.1%}")
+    else:
+        # Use cached detection results when other settings change (tilt, azimuth, etc.)
+        print(f"   ♻️ USING CACHED DETECTION")
+        detected_type = st.session_state.data.get("detected_roof_type", "Pitched")
+        confidence = st.session_state.data.get("detection_confidence", 0)
+        debug_info = st.session_state.data.get("detection_debug", {})
+        print(f"   Cached values: {detected_type}, Coverage: {debug_info.get('coverage_ratio', 0):.1%}")
 
     # Initialize on first run only
     if "auto_roof_type" not in st.session_state.data:
@@ -187,11 +241,10 @@ def show():
     current_azimuth = st.session_state.data["user_azimuth"]
     user_tilt = st.session_state.data["user_tilt"]
 
-    # Calculate real-time irradiance if not already calculated
-    if "current_irradiance" not in st.session_state.data:
-        recalculate_irradiance()
-
-    current_irradiance = st.session_state.data.get("current_irradiance", 0)
+    # Calculate real-time irradiance based on CURRENT tilt and azimuth
+    # This ensures the displayed values always match the current slider positions
+    current_irradiance = calculate_solar_potential(lat, lon, user_tilt, current_azimuth)
+    st.session_state.data["current_irradiance"] = current_irradiance
 
     # Calculate actual panel dimensions based on orientation
     if current_orientation == "Landscape":
