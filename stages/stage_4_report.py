@@ -342,11 +342,11 @@ def render_final_report(lat, lon):
     - Consider an EV to utilize surplus solar production
     """)
 
-    # === FIND NEARBY DEALERS ===
-    render_dealer_finder_section(lat, lon, solar_results, analysis)
-
     # === DETAILED SOLAR ANALYSIS (cached, loads once) ===
     render_detailed_analysis_section(lat, lon)
+
+    # === FIND NEARBY DEALERS ===
+    render_dealer_finder_section(lat, lon, solar_results, analysis)
 
     # === FINAL ACTIONS ===
     st.divider()
