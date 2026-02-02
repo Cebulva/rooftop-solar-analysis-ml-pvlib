@@ -1,5 +1,5 @@
 {
-  "last_id": 14,
+  "last_id": 17,
   "inquiries": {
     "INQ-001": {
       "created": "2026-01-29T10:53:12.293115",
@@ -126,6 +126,33 @@
       "lon": 13.5536902,
       "current_step": 5,
       "system_kwp": 3.52
+    },
+    "INQ-015": {
+      "created": "2026-02-02T10:59:02.746395",
+      "modified": "2026-02-02T10:59:49.642106",
+      "address": "",
+      "lat": 52.5173294,
+      "lon": 13.5536902,
+      "current_step": 4,
+      "system_kwp": null
+    },
+    "INQ-016": {
+      "created": "2026-02-02T11:00:23.243198",
+      "modified": "2026-02-02T11:01:19.507217",
+      "address": "",
+      "lat": 52.5164020402982,
+      "lon": 13.554830253124239,
+      "current_step": 5,
+      "system_kwp": 3.52
+    },
+    "INQ-017": {
+      "created": "2026-02-02T11:05:11.383416",
+      "modified": "2026-02-02T11:05:11.383416",
+      "address": "",
+      "lat": null,
+      "lon": null,
+      "current_step": 1,
+      "system_kwp": null
     }
   }
 }

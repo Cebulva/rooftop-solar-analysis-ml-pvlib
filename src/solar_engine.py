@@ -172,22 +172,22 @@ def calculate_solar_potential(lat, lon, tilt, azimuth):
     """Calculates the peak solar energy potential (W/m2)."""
     # June 21st, 2026 at Noon
     times = pd.date_range('2026-06-21 12:00:00', periods=1, freq='H', tz='Europe/Berlin')
-    
+
     # 1. Sun Position
     solpos = solarposition.get_solarposition(times, lat, lon)
-    
+
     # 2. Extra-terrestrial Radiation (Updated to match your documentation)
     # Note: If get_extra_radiation still fails, try irradiance.get_total_extraradiation
     dni_extra = irradiance.get_extra_radiation(times)
-    
+
     # 3. Air Mass & Pressure
     airmass = atmosphere.get_relative_airmass(solpos['apparent_zenith'])
-    pressure = atmosphere.alt2pres(0) 
+    pressure = atmosphere.alt2pres(0)
     am_abs = atmosphere.get_absolute_airmass(airmass, pressure)
-    
+
     # 4. Clear Sky Model
     cs = ineichen(solpos['apparent_zenith'], am_abs, linke_turbidity=3.0, dni_extra=dni_extra)
-    
+
     # 5. Total Irradiance on the Tilted Surface
     total_irrad = irradiance.get_total_irradiance(
         surface_tilt=tilt,
@@ -198,8 +198,94 @@ def calculate_solar_potential(lat, lon, tilt, azimuth):
         ghi=cs['ghi'],
         dhi=cs['dhi']
     )
-    
+
     return float(total_irrad['poa_global'].iloc[0])
+
+
+def calculate_optimal_azimuth(lat, lon, tilt):
+    """
+    Calculates the optimal panel azimuth angle that maximizes annual solar irradiance.
+
+    Uses pvlib to simulate irradiance across the year and finds the azimuth
+    that produces maximum energy output.
+
+    Args:
+        lat: Latitude of the location
+        lon: Longitude of the location
+        tilt: Panel tilt angle in degrees
+
+    Returns:
+        Optimal azimuth angle in degrees (0° = North, 90° = East, 180° = South, 270° = West)
+    """
+    # For quick calculation, test key dates throughout the year
+    # Spring equinox, Summer solstice, Fall equinox, Winter solstice
+    test_dates = [
+        '2026-03-20 12:00:00',  # Spring equinox
+        '2026-06-21 12:00:00',  # Summer solstice
+        '2026-09-22 12:00:00',  # Fall equinox
+        '2026-12-21 12:00:00',  # Winter solstice
+    ]
+
+    times = pd.DatetimeIndex(test_dates).tz_localize('Europe/Berlin')
+
+    # Get sun position for all test dates
+    solpos = solarposition.get_solarposition(times, lat, lon)
+    dni_extra = irradiance.get_extra_radiation(times)
+    airmass = atmosphere.get_relative_airmass(solpos['apparent_zenith'])
+    pressure = atmosphere.alt2pres(0)
+    am_abs = atmosphere.get_absolute_airmass(airmass, pressure)
+    cs = ineichen(solpos['apparent_zenith'], am_abs, linke_turbidity=3.0, dni_extra=dni_extra)
+
+    best_azimuth = 180  # Default to South (optimal for Northern Hemisphere)
+    best_total_irradiance = 0
+
+    # Test azimuth angles in 10° increments
+    for azimuth in range(0, 360, 10):
+        total_irrad = irradiance.get_total_irradiance(
+            surface_tilt=tilt,
+            surface_azimuth=azimuth,
+            solar_zenith=solpos['apparent_zenith'],
+            solar_azimuth=solpos['azimuth'],
+            dni=cs['dni'],
+            ghi=cs['ghi'],
+            dhi=cs['dhi']
+        )
+
+        # Sum irradiance across all test dates (weighted average for annual)
+        total = total_irrad['poa_global'].sum()
+
+        if total > best_total_irradiance:
+            best_total_irradiance = total
+            best_azimuth = azimuth
+
+    # Fine-tune around the best angle (±10° in 1° steps)
+    fine_start = max(0, best_azimuth - 10)
+    fine_end = min(360, best_azimuth + 10)
+
+    for azimuth in range(fine_start, fine_end):
+        total_irrad = irradiance.get_total_irradiance(
+            surface_tilt=tilt,
+            surface_azimuth=azimuth,
+            solar_zenith=solpos['apparent_zenith'],
+            solar_azimuth=solpos['azimuth'],
+            dni=cs['dni'],
+            ghi=cs['ghi'],
+            dhi=cs['dhi']
+        )
+
+        total = total_irrad['poa_global'].sum()
+
+        if total > best_total_irradiance:
+            best_total_irradiance = total
+            best_azimuth = azimuth
+
+    print(f"\n☀️ OPTIMAL AZIMUTH CALCULATION:")
+    print(f"   Location: {lat:.4f}°, {lon:.4f}°")
+    print(f"   Tilt: {tilt}°")
+    print(f"   Optimal Azimuth: {best_azimuth}° ({'South' if 135 <= best_azimuth <= 225 else 'North' if best_azimuth < 45 or best_azimuth > 315 else 'East' if 45 <= best_azimuth < 135 else 'West'})")
+    print(f"   Max Irradiance Sum: {best_total_irradiance:.0f} W/m²")
+
+    return float(best_azimuth)
 
 def get_sunny_polygon_mask(roof_only, mask, threshold_offset=20):
     """

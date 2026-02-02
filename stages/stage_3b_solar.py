@@ -14,6 +14,7 @@ from src.solar_engine import (
     draw_azimuth_arrow,
     get_sunny_polygon_mask,
     calculate_solar_potential,
+    calculate_optimal_azimuth,  # NEW: Auto-calculate best azimuth for max power
     calculate_global_gsd,
     create_solar_panel_sprite,  # Panel visualization
     overlay_panel_sprite,
@@ -26,7 +27,7 @@ from src.solar_engine import (
 )
 
 # Geometry utilities
-from src.geometry_utils import calculate_azimuth, mask_to_polygon
+from src.geometry_utils import mask_to_polygon
 
 # Inquiry management
 from src.inquiry_manager import save_inquiry
@@ -151,14 +152,16 @@ def show():
 
     # Initialize on first run only
     if "auto_roof_type" not in st.session_state.data:
-        auto_azimuth = calculate_azimuth(st.session_state.data["final_poly"], img=roof_only)
-
         # Set default tilt based on roof type
         default_tilt = DEFAULT_PITCHED_TILT if detected_type == "Pitched" else DEFAULT_FLAT_TILT
 
+        # Calculate optimal azimuth for maximum solar power production
+        # This uses pvlib to find the best panel orientation based on location
+        optimal_azimuth = calculate_optimal_azimuth(lat, lon, default_tilt)
+
         st.session_state.data.update({
             "auto_roof_type": detected_type,
-            "user_azimuth": float(auto_azimuth),
+            "user_azimuth": float(optimal_azimuth),
             "user_tilt": default_tilt,
             "panel_orientation": DEFAULT_PANEL_ORIENTATION,  # Initialize orientation
             "roof_type_manually_set": False  # Track if user manually changed roof type
@@ -172,6 +175,7 @@ def show():
         print(f"   Brightness Range: {debug_info.get('brightness_range', 0):.0f}")
         print(f"   Texture StdDev: {debug_info.get('std_dev', 0):.1f}")
         print(f"   Default Tilt: {default_tilt}°")
+        print(f"   Optimal Azimuth: {optimal_azimuth}° (auto-calculated for max power)")
 
     # Auto-update roof type if user hasn't manually changed it
     elif not st.session_state.data.get("roof_type_manually_set", False):
