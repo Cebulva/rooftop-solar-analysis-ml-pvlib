@@ -2,6 +2,8 @@
 
 **SolarSight** is an end-to-end web application for automated rooftop solar analysis. It combines deep learning, geospatial processing, and solar physics simulation to help homeowners evaluate their solar potential and connect with local installers.
 
+<img width="1024" height="1024" alt="SolarSight" src="https://github.com/user-attachments/assets/3f05e162-4bfe-421a-9ee4-5d44b9bb30b6" />
+
 ---
 
 ## Overview
