@@ -31,6 +31,12 @@ SolarSight automates the solar assessment process:
 
 ---
 
+## Demonstration
+
+https://github.com/user-attachments/assets/ad262485-8b5d-4c81-a1bb-5d03250aaf21
+
+---
+
 ## Tech Stack
 
 | Category | Technologies |
